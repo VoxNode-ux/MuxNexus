@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/auto">
+
+    <!--
+        Deliberately NO android.permission.INTERNET and no ACCESS_NETWORK_STATE.
+        Their absence is enforced at the manifest level, on top of the
+        --disable-network flag used when compiling the native engine, so the
+        app is offline by construction, not just by convention.
+    -->
+
+    <application
+        android:allowBackup="false"
+        android:label="OfflineRemux"
+        android:theme="@style/Theme.OfflineRemux"
+        android:usesCleartextTraffic="false"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.OfflineRemux">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>
+ 
