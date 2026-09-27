@@ -31,7 +31,7 @@ jobs:
 
       - name: Cache built FFmpeg static libs
         id: cache-ffmpeg
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: app/src/main/cpp/ffmpeg
           key: ffmpeg-n6.1.1-${{ runner.os }}-v1
