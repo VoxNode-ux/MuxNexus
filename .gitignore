@@ -1,0 +1,37 @@
+# Gradle
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Native build outputs
+.cxx/
+.externalNativeBuild/
+native-build/ffmpeg-src/
+native-build/build-*/
+
+# FFmpeg static libs are locally built (see native-build/build_ffmpeg.sh),
+# not committed — only the directory scaffold (.gitkeep) is tracked.
+app/src/main/cpp/ffmpeg/*/lib/*.a
+app/src/main/cpp/ffmpeg/include/*
+
+# Local config (never commit signing secrets or machine-specific SDK paths)
+local.properties
+*.jks
+*.keystore
+keystore.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
