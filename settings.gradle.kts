@@ -13,5 +13,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OfflineRemux"
+rootProject.name = "MuxNexus"
 include(":app")
+ 
