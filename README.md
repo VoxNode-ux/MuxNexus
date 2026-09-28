@@ -1,4 +1,4 @@
-# OfflineRemux
+# MuxNexus
 
 Offline (compile-time network-stripped) media remuxer. Three tiers, as specced:
 
