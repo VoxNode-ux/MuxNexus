@@ -1,4 +1,4 @@
-package com.offlineremux.app
+package com.muxnexus.app
 
 import android.content.Context
 import android.content.Intent
