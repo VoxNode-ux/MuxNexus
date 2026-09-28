@@ -1,4 +1,4 @@
-package com.offlineremux.app.ui
+package com.muxnexus.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -433,3 +433,4 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1_000 -> "%.1f KB".format(bytes / 1_000.0)
     else -> "$bytes B"
 }
+ 
