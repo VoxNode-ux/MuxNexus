@@ -1,4 +1,4 @@
-package com.offlineremux.app.engine
+package com.muxnexus.app.engine
 
 import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.channels.Channel
