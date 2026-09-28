@@ -36,7 +36,7 @@ a JDK are enough.
    ```
    (Windows: `gradlew.bat :app:assembleDebug`.) Gradle's CMake integration
    picks up the FFmpeg libs from step 1 automatically — no manual linking.
-   First run downloads the Gradle 8.7 distribution itself (~200MB, once,
+   First run downloads the Gradle 9.7.1 distribution itself (~200MB, once,
    cached in `~/.gradle`).
 3. **Install:** `./gradlew installDebug` with a device connected via `adb`,
    or grab the APK from `app/build/outputs/apk/debug/` and side-load it.
