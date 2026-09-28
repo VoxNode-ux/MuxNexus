@@ -1,4 +1,4 @@
-package com.offlineremux.app.ui
+package com.muxnexus.app.ui
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
-fun OfflineRemuxTheme(content: @Composable () -> Unit) {
+fun MuxNexusTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val context = LocalContext.current
     val scheme = when {
@@ -22,3 +22,4 @@ fun OfflineRemuxTheme(content: @Composable () -> Unit) {
     }
     MaterialTheme(colorScheme = scheme, content = content)
 }
+ 
