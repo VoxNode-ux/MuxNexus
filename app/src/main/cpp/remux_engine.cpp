@@ -35,6 +35,7 @@ constexpr int STATE_ERROR = 5;
 struct RemuxJob {
     int input_fd = -1;
     int output_fd = -1;
+    char output_format[16] = "mp4";
     std::atomic<bool> cancel_requested{false};
     JavaVM *jvm = nullptr;
     jobject callback_global_ref = nullptr; // the Kotlin lambda, held as a global ref
@@ -147,7 +148,7 @@ void report_telemetry(RemuxJob *job, int64_t pts, int64_t dts, int stream_index,
 
 // ---- The actual single-pass remux loop ------------------------------------
 
-void run_remux(RemuxJob *job) {
+void run_remux_impl(RemuxJob *job) {
     pin_to_performance_core();
 
     AVFormatContext *in_ctx = nullptr;
@@ -180,9 +181,10 @@ void run_remux(RemuxJob *job) {
         return;
     }
 
-    // Output container inferred from the input; a real build would expose
-    // this as a user choice (mp4 vs mov vs mkv) instead of guessing.
-    const char *out_format_name = "mp4";
+    // Output container: chosen by the user in the UI (see OutputFormat in
+    // TelemetryModel.kt) instead of guessed. Falls back to "mp4" if the
+    // native layer somehow receives an empty string.
+    const char *out_format_name = job->output_format[0] != '\0' ? job->output_format : "mp4";
     avformat_alloc_output_context2(&out_ctx, nullptr, out_format_name, nullptr);
 
     out_buf = static_cast<uint8_t *>(av_malloc(IO_BUF_SIZE));
@@ -275,16 +277,32 @@ void run_remux(RemuxJob *job) {
     }
 }
 
+// Wrapper so the two fds handed over from Kotlin (detachFd) are always closed,
+// including on every early-error return inside run_remux_impl.
+void run_remux(RemuxJob *job) {
+    run_remux_impl(job);
+    if (job->input_fd >= 0) close(job->input_fd);
+    if (job->output_fd >= 0) close(job->output_fd);
+    job->input_fd = job->output_fd = -1;
+}
+
 } // namespace
 
 JNIEXPORT jlong JNICALL
 Java_com_offlineremux_app_engine_NativeBridge_startRemux(
     JNIEnv *env, jobject thiz,
-    jint input_fd, jint output_fd, jobject on_progress_callback) {
+    jint input_fd, jint output_fd, jstring output_format, jobject on_progress_callback) {
 
     auto *job = new RemuxJob();
     job->input_fd = input_fd;
     job->output_fd = output_fd;
+
+    if (output_format != nullptr) {
+        const char *fmt = env->GetStringUTFChars(output_format, nullptr);
+        strncpy(job->output_format, fmt, sizeof(job->output_format) - 1);
+        env->ReleaseStringUTFChars(output_format, fmt);
+    }
+
     env->GetJavaVM(&job->jvm);
     job->callback_global_ref = env->NewGlobalRef(on_progress_callback);
     job->bridge_global_ref = env->NewGlobalRef(thiz);
