@@ -1,4 +1,4 @@
-package com.offlineremux.app.engine
+package com.muxnexus.app.engine
 
 import android.content.ContentResolver
 import android.content.Context
@@ -130,3 +130,4 @@ class BatchQueue(private val context: Context) {
         private const val KEY_JOBS = "jobs_json"
     }
 }
+ 
