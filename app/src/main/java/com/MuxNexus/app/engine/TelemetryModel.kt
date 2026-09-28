@@ -1,4 +1,4 @@
-package com.offlineremux.app.engine
+package com.muxnexus.app.engine
 
 /**
  * One packet-level telemetry sample surfaced across the JNI bridge.
@@ -40,3 +40,4 @@ enum class OutputFormat(
 }
 
 enum class JobStatus { PENDING, RUNNING, DONE, ERROR }
+ 
