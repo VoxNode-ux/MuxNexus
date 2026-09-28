@@ -1,4 +1,4 @@
-# Contributing to OfflineRemux
+# Contributing to MuxNexus
 
 Thanks for considering a contribution. This is a small, focused FOSS project —
 please keep PRs scoped and avoid drive-by refactors mixed in with feature work.
@@ -33,3 +33,4 @@ always the first thing needed to reproduce.
 ## Security issues
 
 Do not open a public issue — see `SECURITY.md`.
+ 
