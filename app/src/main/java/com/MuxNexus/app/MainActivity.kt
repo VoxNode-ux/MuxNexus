@@ -1,4 +1,4 @@
-package com.offlineremux.app
+package com.muxnexus.app
 
 import android.content.Context
 import android.content.Intent
@@ -14,7 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.offlineremux.app.engine.*
-import com.offlineremux.app.ui.theme.OfflineRemuxTheme
+import com.offlineremux.app.ui.theme.MuxNexusTheme
 import com.offlineremux.app.ui.RemuxScreen
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
