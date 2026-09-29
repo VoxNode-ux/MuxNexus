@@ -1,1 +1,10 @@
- 
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Placeholder for API < 31 auto-backup rules. android:allowBackup is "false"
+   in the manifest (queued jobs reference content:// URIs tied to this
+   install's permission grants, which wouldn't survive a restore anyway), so
+   this file currently has nothing to include — kept only so the referenced
+   xml/backup_rules resource resolves if allowBackup is ever turned on.
+-->
+<full-backup-content>
+</full-backup-content>
