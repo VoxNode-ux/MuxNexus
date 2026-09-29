@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.offlineremux.app"
+    namespace = "com.muxnexus.app"
     compileSdk = 37
 
     defaultConfig {
