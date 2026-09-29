@@ -21,11 +21,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.offlineremux.app.engine.*
+import com.muxnexus.app.engine.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemuxScreen(
+    lastError: String?,
+    onDismissError: () -> Unit,
     progress: RemuxProgress,
     queue: List<RemuxJob>,
     onPickInput: (OutputFormat) -> Unit,
@@ -45,7 +47,7 @@ fun RemuxScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("OfflineRemux", fontWeight = FontWeight.SemiBold)
+                        Text("MuxNexus", fontWeight = FontWeight.SemiBold)
                         Text(
                             "Offline video remuxing — no network, ever",
                             style = MaterialTheme.typography.bodySmall,
@@ -71,6 +73,9 @@ fun RemuxScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Spacer(Modifier.height(4.dp))
+            if (lastError != null) {
+                ErrorBanner(lastError, onDismissError)
+            }
             StatusCard(progress)
 
             Row(
@@ -434,3 +439,30 @@ private fun formatBytes(bytes: Long): String = when {
     else -> "$bytes B"
 }
  
+@Composable
+private fun ErrorBanner(message: String, onDismiss: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                message,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Dismiss error",
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+    }
+}
