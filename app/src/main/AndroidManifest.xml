@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/auto">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
         Deliberately NO android.permission.INTERNET and no ACCESS_NETWORK_STATE.
