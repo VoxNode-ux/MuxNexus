@@ -4,11 +4,14 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <pthread.h>
 #include <sched.h>
 #include <string>
 #include <sys/stat.h>
 #include <thread>
+#include <unordered_map>
 #include <unistd.h>
 #include <vector>
 
@@ -53,7 +56,6 @@ struct RemuxJob {
     jmethodID invoke_mid = nullptr;
     jmethodID int_ctor_mid = nullptr;
     jmethodID telemetry_mid = nullptr;
-    std::thread worker;
 };
 
 struct Outcome {
@@ -277,6 +279,8 @@ Outcome run_remux_impl(RemuxJob *job) {
     if (!c.pkt) return {STATE_ERROR, "Out of memory"};
 
     int packet_count = 0;
+    int consecutive_read_errors = 0;
+    bool input_damaged = false;
     int write_errors = 0;
     std::string first_write_error;
 
@@ -300,18 +304,21 @@ Outcome run_remux_impl(RemuxJob *job) {
         ++packet_count;
 
         if (total_size > 0 && (packet_count & 0x7F) == 0) {
-            int percent = static_cast<int>((in_state.pos * 100) / total_size);
+            int percent = static_cast<int>((in_state.pos * 100LL) / total_size);
             report_progress(job, STATE_REMUXING, percent > 99 ? 99 : percent, "");
         }
     };
 
     while (!job->cancel_requested.load()) {
-        if (av_read_frame(c.in, c.pkt) < 0) break;  // end of file (or unreadable tail)
-        const int idx = c.pkt->stream_index;
-        if (idx >= static_cast<int>(stream_map.size()) || stream_map[idx] < 0) {
-            av_packet_unref(c.pkt);
+        int read_ret = av_read_frame(c.in, c.pkt);
+        if (read_ret == AVERROR_EOF) break;
+        if (read_ret < 0) {
+            // Damaged data: skip ahead, but give up after a run of failures instead of spinning.
+            LOGE("Unreadable data near byte %lld: %s", (long long) in_state.pos, av_err(read_ret).c_str());
+            if (++consecutive_read_errors > 50) { input_damaged = true; break; }
             continue;
         }
+        consecutive_read_errors = 0;
         if (AVBSFContext *b = c.bsfs[idx]) {
             if (av_bsf_send_packet(b, c.pkt) < 0) { av_packet_unref(c.pkt); continue; }
             while (av_bsf_receive_packet(b, c.pkt) == 0) emit(c.pkt, idx);
@@ -327,8 +334,15 @@ Outcome run_remux_impl(RemuxJob *job) {
     avio_flush(c.out->pb);
     if (ret < 0) return {STATE_ERROR, "Couldn't finish the file: " + av_err(ret)};
     if (write_errors > 0) return {STATE_ERROR, "Write failed: " + first_write_error};
+    if (input_damaged) return {STATE_ERROR, "Input file is damaged; saved everything that could be read"};
     return {STATE_DONE, "Complete"};
 }
+
+// Live jobs by handle. cancel() looks the handle up here, so a stale or unknown
+// handle is simply ignored instead of dereferencing freed memory.
+std::mutex g_jobs_mutex;
+std::unordered_map<jlong, std::shared_ptr<RemuxJob>> g_jobs;
+std::atomic<jlong> g_next_job_id{1};
 
 // Owns the thread's JNI lifetime and both fds handed over from Kotlin.
 void run_remux(RemuxJob *job) {
@@ -363,7 +377,7 @@ Java_com_muxnexus_app_engine_NativeBridge_startRemux(
     JNIEnv *env, jobject thiz,
     jint input_fd, jint output_fd, jstring output_format, jobject on_progress_callback) {
 
-    auto *job = new RemuxJob();
+    auto job = std::make_shared<RemuxJob>();
     job->input_fd = input_fd;
     job->output_fd = output_fd;
 
@@ -392,15 +406,30 @@ Java_com_muxnexus_app_engine_NativeBridge_startRemux(
     job->telemetry_mid = env->GetMethodID(bridge_cls, "onTelemetry", "(JJIJIZ)V");
     env->DeleteLocalRef(bridge_cls);
 
-    job->worker = std::thread(run_remux, job);
-    job->worker.detach();
-    return reinterpret_cast<jlong>(job);
+    const jlong id = g_next_job_id.fetch_add(1);
+    {
+        std::lock_guard<std::mutex> lock(g_jobs_mutex);
+        g_jobs[id] = job;
+    }
+    // The lambda owns a shared_ptr: the job is freed once the worker is done
+    // and its registry entry is removed.
+    std::thread([job, id]() {
+        run_remux(job.get());
+        std::lock_guard<std::mutex> lock(g_jobs_mutex);
+        g_jobs.erase(id);
+    }).detach();
+    return id;
 }
 
 JNIEXPORT void JNICALL
 Java_com_muxnexus_app_engine_NativeBridge_cancel(
     JNIEnv *env, jobject thiz, jlong job_handle) {
-    if (job_handle == 0 || job_handle == -1) return;  // no job running
-    auto *job = reinterpret_cast<RemuxJob *>(job_handle);
+    std::shared_ptr<RemuxJob> job;
+    {
+        std::lock_guard<std::mutex> lock(g_jobs_mutex);
+        auto it = g_jobs.find(job_handle);
+        if (it == g_jobs.end()) return;  // already finished, or never existed
+        job = it->second;
+    }
     job->cancel_requested.store(true);
 }
