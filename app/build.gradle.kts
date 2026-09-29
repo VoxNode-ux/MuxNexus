@@ -8,7 +8,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.offlineremux.app"
+        applicationId = "com.muxnexus.app"
         minSdk = 29
         targetSdk = 37
         versionCode = 1
