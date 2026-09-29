@@ -13,9 +13,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import com.offlineremux.app.engine.*
-import com.offlineremux.app.ui.theme.MuxNexusTheme
-import com.offlineremux.app.ui.RemuxScreen
+import com.muxnexus.app.engine.*
+import com.muxnexus.app.ui.theme.MuxNexusTheme
+import com.muxnexus.app.ui.RemuxScreen
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.UUID
