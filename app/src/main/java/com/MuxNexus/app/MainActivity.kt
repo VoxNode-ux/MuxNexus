@@ -1,4 +1,4 @@
-package com.muxnexus.app
+package com.offlineremux.app
 
 import android.content.Context
 import android.content.Intent
@@ -14,7 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.offlineremux.app.engine.*
-import com.offlineremux.app.ui.OfflineRemuxTheme
+import com.offlineremux.app.ui.theme.OfflineRemuxTheme
 import com.offlineremux.app.ui.RemuxScreen
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -29,7 +29,7 @@ private class CreateDocumentWithType : ActivityResultContract<Pair<String, Strin
             .putExtra(Intent.EXTRA_TITLE, input.second)
 
     override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
-        if (resultCode == RESULT_OK) intent?.data else null
+        if (resultCode == android.app.Activity.RESULT_OK) intent?.data else null
 }
 
 class MainActivity : ComponentActivity() {
@@ -98,7 +98,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onCancel = {
                         batchCancelled = true
-                        NativeBridge.cancel(jobHandle)
+                        if (jobHandle != -1L) NativeBridge.cancel(jobHandle)
                     },
                     onRemove = { id -> queue.remove(id); refreshQueue() },
                     onMoveUp = { id -> queue.moveUp(id); refreshQueue() },
