@@ -54,6 +54,7 @@ for entry in "${ABIS[@]}"; do
     --enable-cross-compile \
     --disable-shared \
     --enable-static \
+    --enable-pic \
     --disable-doc \
     --disable-programs \
     --disable-avdevice \
@@ -69,8 +70,7 @@ for entry in "${ABIS[@]}"; do
     --enable-muxer=matroska \
     --disable-decoders \
     --disable-bsfs \
-    --enable-bsf=h264_mp4toannexb \
-    --enable-bsf=hevc_mp4toannexb \
+    --enable-bsf=aac_adtstoasc \
     --disable-demuxers \
     --enable-demuxer=mov \
     --enable-demuxer=matroska \
