@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-/** Save-file picker whose MIME type can change per call (MP4 vs MOV vs MKV). */
 private class CreateDocumentWithType : ActivityResultContract<Pair<String, String>, Uri?>() {
     override fun createIntent(context: Context, input: Pair<String, String>): Intent =
         Intent(Intent.ACTION_CREATE_DOCUMENT)
@@ -38,17 +37,19 @@ class MainActivity : ComponentActivity() {
 
     private var progressState by mutableStateOf(RemuxProgress(RemuxState.IDLE))
     private var jobs by mutableStateOf<List<RemuxJob>>(emptyList())
+    private var lastError by mutableStateOf<String?>(null)
 
     private var jobHandle: Long = -1L
     private var batchCancelled = false
 
-    // Set when the user taps "Add file" and picks a format, consumed by the pickers.
     private var pendingFormat: OutputFormat = OutputFormat.MP4
     private var pendingInputUri: Uri? = null
 
     private val pickInput = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
-        queue.takePersistableUriPermission(contentResolver, uri, forWrite = false)
+        runCatching {
+            queue.takePersistableUriPermission(contentResolver, uri, forWrite = false)
+        }
         pendingInputUri = uri
         val suggested = displayName(uri).substringBeforeLast('.') + "." + pendingFormat.fileExtension
         pickOutput.launch(pendingFormat.mimeType to suggested)
@@ -58,7 +59,9 @@ class MainActivity : ComponentActivity() {
         val input = pendingInputUri
         pendingInputUri = null
         if (uri == null || input == null) return@registerForActivityResult
-        queue.takePersistableUriPermission(contentResolver, uri, forWrite = true)
+        runCatching {
+            queue.takePersistableUriPermission(contentResolver, uri, forWrite = true)
+        }
         queue.enqueue(
             RemuxJob(
                 id = UUID.randomUUID().toString(),
@@ -84,16 +87,19 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            OfflineRemuxTheme {
+            MuxNexusTheme {
                 RemuxScreen(
                     progress = progressState,
                     queue = jobs,
+                    lastError = lastError,
+                    onDismissError = { lastError = null },
                     onPickInput = { format ->
                         pendingFormat = format
                         pickInput.launch(arrayOf("video/*", "audio/*"))
                     },
                     onStart = {
                         batchCancelled = false
+                        lastError = null
                         startNextJob()
                     },
                     onCancel = {
@@ -112,7 +118,6 @@ class MainActivity : ComponentActivity() {
         jobs = queue.loadAll()
     }
 
-    /** Runs the first waiting job; when it finishes, the callback starts the next one. */
     private fun startNextJob() {
         val job = queue.pending().firstOrNull()
         if (job == null) {
@@ -120,11 +125,24 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val inputPfd = contentResolver.openFileDescriptor(job.inputUri, "r")
-        val outputPfd = contentResolver.openFileDescriptor(job.outputUri, "w")
+        val inputPfd: android.os.ParcelFileDescriptor?
+        val outputPfd: android.os.ParcelFileDescriptor?
+        try {
+            inputPfd = contentResolver.openFileDescriptor(job.inputUri, "r")
+            outputPfd = contentResolver.openFileDescriptor(job.outputUri, "w")
+        } catch (e: Exception) {
+            queue.markError(job.id, "Can't open file: ${e.message}")
+            lastError = "Failed to open ${job.displayName}"
+            refreshQueue()
+            startNextJob()
+            return
+        }
+
         if (inputPfd == null || outputPfd == null) {
-            inputPfd?.close(); outputPfd?.close()
+            inputPfd?.close()
+            outputPfd?.close()
             queue.markError(job.id, "Can't open file")
+            lastError = "Failed to open ${job.displayName}"
             refreshQueue()
             startNextJob()
             return
@@ -139,7 +157,6 @@ class MainActivity : ComponentActivity() {
             outputFd = NativeBridge.withDupedFd(outputPfd),
             outputFormat = job.format.ffmpegMuxerName,
             onProgress = { state, percent, message ->
-                // Called from the native worker thread; hop to the UI thread.
                 runOnUiThread { onNativeProgress(job, state, percent, message) }
             }
         )
@@ -147,18 +164,36 @@ class MainActivity : ComponentActivity() {
 
     private fun onNativeProgress(job: RemuxJob, state: Int, percent: Int, message: String) {
         val remuxState = RemuxState.entries.getOrElse(state) { RemuxState.ERROR }
-        progressState = progressState.copy(state = remuxState, percent = percent, message = message.ifBlank { job.displayName })
+
+        // A user-requested cancel comes back from the engine as ERROR("Cancelled").
+        // That isn't a failure: put the file back in the queue and go idle.
+        if (remuxState == RemuxState.ERROR && batchCancelled) {
+            jobHandle = -1L
+            queue.markPending(job.id)
+            refreshQueue()
+            progressState = RemuxProgress(RemuxState.IDLE, 0, "Cancelled")
+            return
+        }
+
+        progressState = progressState.copy(
+            state = remuxState,
+            percent = percent,
+            message = message.ifBlank { job.displayName }
+        )
 
         when (remuxState) {
             RemuxState.DONE -> {
+                jobHandle = -1L  // the native job is finished; never cancel a stale handle
                 queue.markDone(job.id)
                 refreshQueue()
                 if (!batchCancelled) startNextJob()
             }
             RemuxState.ERROR -> {
-                queue.markError(job.id, message.ifBlank { "Failed" })
+                jobHandle = -1L
+                val errMsg = message.ifBlank { "Failed" }
+                queue.markError(job.id, errMsg)
+                lastError = "${job.displayName}: $errMsg"
                 refreshQueue()
-                // A failed file shouldn't stop the rest of the batch, but a cancel should.
                 if (!batchCancelled) startNextJob()
             }
             else -> Unit
