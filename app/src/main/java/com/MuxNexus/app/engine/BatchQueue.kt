@@ -72,6 +72,7 @@ class BatchQueue(private val context: Context) {
     }
 
     fun markRunning(id: String) = updateStatus(id, JobStatus.RUNNING, null)
+    fun markPending(id: String) = updateStatus(id, JobStatus.PENDING, null)
     fun markDone(id: String) = updateStatus(id, JobStatus.DONE, null)
     fun markError(id: String, message: String) = updateStatus(id, JobStatus.ERROR, message)
 
