@@ -55,6 +55,7 @@ for entry in "${ABIS[@]}"; do
     --disable-shared \
     --enable-static \
     --enable-pic \
+    --disable-autodetect \
     --disable-doc \
     --disable-programs \
     --disable-avdevice \
