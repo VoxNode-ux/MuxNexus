@@ -1,46 +1,39 @@
 package com.muxnexus.app.engine
 
 import android.os.ParcelFileDescriptor
+import androidx.annotation.Keep
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 
 /**
- * Thin JNI boundary. Every call here crosses into remux_engine.cpp.
- *
- * File descriptors, not paths: `openFd` is expected to be a dup'd fd pulled
- * from a SAF Uri via ContentResolver.openFileDescriptor(uri, mode), so the
- * native side never needs java.io.File / generic filesystem access — it
- * reads and writes through the fd:// path the OS/IO tier is built around.
+ * Thin JNI boundary. Every call here crosses into native/android/jni_bridge.cpp.
+ * File descriptors, not paths: `detachFd` transfers ownership of a dup'd fd
+ * pulled from a SAF Uri via ContentResolver.openFileDescriptor(uri, mode).
  */
 object NativeBridge {
 
     init {
-        // Must match add_library() name in CMakeLists.txt
+        // Must match add_library() name in native/CMakeLists.txt
         System.loadLibrary("remux_engine")
     }
 
-    // Backpressure-free channel so the native thread never blocks on a slow
-    // Compose recomposition; UI drops frames of telemetry under load, never
-    // the engine.
     private val telemetryChannel = Channel<TelemetrySample>(capacity = Channel.CONFLATED)
     val telemetryFlow = telemetryChannel.receiveAsFlow()
 
     /**
-     * Starts a single-pass remux from [inputFd] to [outputFd]. Returns
-     * immediately; progress and completion arrive via [onProgress].
-     * Runs on a pinned high-performance core via pthread affinity set
-     * natively (see remux_engine.cpp: pin_to_performance_core()).
+     * Starts a remux job. Returns the native handle, or -1 if the JVM could
+     * not set up the callback (extremely rare; treat as "start failed").
      */
     external fun startRemux(
         inputFd: Int,
         outputFd: Int,
         outputFormat: String,
-        onProgress: (state: Int, percent: Int, message: String) -> Unit
-    ): Long // returns an opaque native job handle, or -1 on immediate failure
+        onProgress: RemuxProgressCallback
+    ): Long
 
     external fun cancel(jobHandle: Long)
 
-    /** Called from native code via JNI upcall; kept package-visible on purpose. */
+    @Keep
     @Suppress("unused")
     private fun onTelemetry(
         ptsUs: Long,
@@ -55,5 +48,6 @@ object NativeBridge {
         )
     }
 
-    fun withDupedFd(pfd: ParcelFileDescriptor): Int = pfd.detachFd()
+    /** Transfers ownership of the fd. The PFD must not be closed afterward. */
+    fun detachFd(pfd: ParcelFileDescriptor): Int = pfd.detachFd()
 }

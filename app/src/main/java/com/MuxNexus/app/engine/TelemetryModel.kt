@@ -1,11 +1,5 @@
 package com.muxnexus.app.engine
 
-/**
- * One packet-level telemetry sample surfaced across the JNI bridge.
- * Populated natively in remux_engine.cpp on every packet copied during the
- * single-pass interleave loop; never blocks the native thread (see
- * NativeBridge.onTelemetry — it just enqueues onto a channel).
- */
 data class TelemetrySample(
     val ptsUs: Long,
     val dtsUs: Long,
@@ -15,8 +9,12 @@ data class TelemetrySample(
     val isKeyframe: Boolean
 )
 
+/**
+ * Ordinal order MUST match the C++ RemuxState enum in native/core/remux_core.h.
+ * The JNI bridge passes the raw int; a mismatch here silently mislabels states.
+ */
 enum class RemuxState {
-    IDLE, READING_HEADERS, REMUXING, FINALIZING, DONE, ERROR
+    IDLE, READING_HEADERS, REMUXING, FINALIZING, DONE, ERROR, CANCELLED
 }
 
 data class RemuxProgress(
@@ -26,7 +24,6 @@ data class RemuxProgress(
     val lastSample: TelemetrySample? = null
 )
 
-/** Output container the user picks when queuing a job. */
 enum class OutputFormat(
     val label: String,
     val shortLabel: String,
@@ -40,4 +37,3 @@ enum class OutputFormat(
 }
 
 enum class JobStatus { PENDING, RUNNING, DONE, ERROR }
- 
