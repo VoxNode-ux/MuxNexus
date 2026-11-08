@@ -1,0 +1,46 @@
+name: dep-report
+
+# Manual only. Prints which Gradle configuration resolves each flagged library,
+# and at which version. Changes nothing.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install NDK + CMake
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "ndk;28.2.13676358" "cmake;3.22.1" > /dev/null
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+        with:
+          gradle-version: '9.8.2'
+
+      - name: Resolve all :app configurations
+        run: ./gradlew :app:dependencies --no-daemon --console=plain > app-deps.txt || true
+
+      - name: Resolve root buildscript classpath
+        run: ./gradlew buildEnvironment --no-daemon --console=plain > build-env.txt || true
+
+      - name: Summary
+        run: |
+          PATTERN='bcprov|bcpkix|bcutil|guava:guava|commons-lang3|httpclient'
+          {
+            echo "## :app configurations (configuration: dependency line)"
+            echo '```'
+            awk '/^[A-Za-z_][A-Za-z0-9_]* - /{cfg=$1} /'"$PATTERN"'/{sub(/^[ |+\\-]+/,""); print cfg": "$0}' app-deps.txt | sort -u | head -150
+            echo '```'
+            echo "## Root buildscript classpath"
+            echo '```'
+            grep -E "$PATTERN" build-env.txt | sed -E 's/^[ |+\\-]+//' | sort -u | head -60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
