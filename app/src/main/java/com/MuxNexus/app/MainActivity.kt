@@ -169,8 +169,8 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             } catch (t: Throwable) {
-                runCatching { android.os.ParcelFileDescriptor.adoptFd(inputFd).close() }
-                runCatching { android.os.ParcelFileDescriptor.adoptFd(outputFd).close() }
+                closeFd(inputFd)
+                closeFd(outputFd)
                 queue.markError(job.id, "Native start failed: ${t.message}")
                 vm.lastError = "Failed to start ${job.displayName}"
                 refreshQueue()
@@ -178,6 +178,9 @@ class MainActivity : ComponentActivity() {
             }
 
             if (handle < 0) {
+                // Native returned early without taking ownership of the fds.
+                closeFd(inputFd)
+                closeFd(outputFd)
                 queue.markError(job.id, "Native callback setup failed")
                 vm.lastError = "Failed to start ${job.displayName}"
                 refreshQueue()
@@ -210,7 +213,8 @@ class MainActivity : ComponentActivity() {
             }
             RemuxState.DONE -> {
                 vm.jobHandle = -1L
-                val verified = message.startsWith("Complete") && !message.contains("warnings")
+                // Native sends exactly "Complete" only when the output was re-opened and checked.
+                val verified = message == "Complete"
                 queue.markDone(job.id, verified)
                 refreshQueue()
                 vm.progressState = vm.progressState.copy(
@@ -241,6 +245,10 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun closeFd(fd: Int) {
+        runCatching { android.os.ParcelFileDescriptor.adoptFd(fd).close() }
     }
 
     private fun displayName(uri: Uri): String {
