@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 cd ..
 
 TARGET="${1:-android}"
-FFMPEG_VERSION="n6.1.1"
+FFMPEG_VERSION="n6.1.6"
 OUT_ROOT="$(pwd)/app/src/main/cpp/ffmpeg"
 API_LEVEL=29
 
