@@ -1,5 +1,6 @@
 #include "../core/remux_core.h"
 
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
