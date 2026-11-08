@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">MuxNexus</string>
+    <string name="queue_filters">Queue filters</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_reading">Reading file headers</string>
+    <string name="status_remuxing">Remuxing</string>
+    <string name="status_finalizing">Finishing up</string>
+    <string name="status_done">Complete</string>
+    <string name="status_error">Something went wrong</string>
+    <string name="status_cancelled">Cancelled</string>
+    <string name="verified_badge">Verified</string>
+    <string name="unverified_badge">Not verified</string>
 </resources>
