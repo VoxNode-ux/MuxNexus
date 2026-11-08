@@ -9,6 +9,7 @@ cd ..
 
 TARGET="${1:-android}"
 FFMPEG_VERSION="n6.1.6"
+FFMPEG_COMMIT="f1e3a2bf7a2f2cde936d1ed97f09a26853d20125"  # commit for n6.1.6
 OUT_ROOT="$(pwd)/app/src/main/cpp/ffmpeg"
 API_LEVEL=29
 
@@ -22,6 +23,11 @@ clone_ffmpeg() {
   if [ ! -d ffmpeg-src ]; then
     git clone --depth 1 --branch "${FFMPEG_VERSION}" \
       https://github.com/FFmpeg/FFmpeg.git ffmpeg-src
+  fi
+  actual="$(git -C ffmpeg-src rev-parse HEAD)"
+  if [ "${actual}" != "${FFMPEG_COMMIT}" ]; then
+    echo "FFmpeg commit mismatch: expected ${FFMPEG_COMMIT}, got ${actual}" >&2
+    exit 1
   fi
 }
 
