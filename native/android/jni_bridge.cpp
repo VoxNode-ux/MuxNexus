@@ -100,6 +100,7 @@ Java_com_muxnexus_app_engine_NativeBridge_startRemux(
     job->progress_mid = env->GetMethodID(cb_cls, "onProgress", "(IILjava/lang/String;)V");
     env->DeleteLocalRef(cb_cls);
     if (!job->progress_mid) {
+        env->ExceptionClear();
         env->DeleteGlobalRef(job->callback_ref);
         env->DeleteGlobalRef(job->bridge_ref);
         return -1;  // Kotlin treats -1 as "start failed"
@@ -108,6 +109,12 @@ Java_com_muxnexus_app_engine_NativeBridge_startRemux(
     jclass bridge_cls = env->GetObjectClass(thiz);
     job->telemetry_mid = env->GetMethodID(bridge_cls, "onTelemetry", "(JJIJIZ)V");
     env->DeleteLocalRef(bridge_cls);
+    if (!job->telemetry_mid) {
+        env->ExceptionClear();
+        env->DeleteGlobalRef(job->callback_ref);
+        env->DeleteGlobalRef(job->bridge_ref);
+        return -1;
+    }
 
     std::string fmt;
     if (output_format) {
