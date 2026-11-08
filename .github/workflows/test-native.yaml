@@ -1,0 +1,65 @@
+name: test-native
+
+on:
+  push:
+    branches: [main]
+    paths: ['native/**', '.github/workflows/test-native.yml']
+  pull_request:
+    paths: ['native/**', '.github/workflows/test-native.yml']
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config ffmpeg \
+            libavformat-dev libavcodec-dev libavutil-dev
+      - run: cmake -S native -B build -G Ninja -DMUXNEXUS_BUILD_TESTS=ON
+      - run: cmake --build build
+      - run: ./native/tests/fixtures/generate.sh
+      - run: ctest --test-dir build --output-on-failure
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install cmake ninja pkg-config ffmpeg
+      - run: cmake -S native -B build -G Ninja -DMUXNEXUS_BUILD_TESTS=ON
+      - run: cmake --build build
+      - run: ./native/tests/fixtures/generate.sh
+      - run: ctest --test-dir build --output-on-failure
+
+  freebsd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: pkg install -y cmake ninja pkgconf ffmpeg git
+          run: |
+            cmake -S native -B build -G Ninja -DMUXNEXUS_BUILD_TESTS=ON
+            cmake --build build
+            ./native/tests/fixtures/generate.sh
+            ctest --test-dir build --output-on-failure
+
+  fuzz:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build clang pkg-config \
+            libavformat-dev libavcodec-dev libavutil-dev
+      - env:
+          CC: clang
+          CXX: clang++
+        run: cmake -S native -B build-fuzz -G Ninja -DMUXNEXUS_BUILD_FUZZ=ON
+      - run: cmake --build build-fuzz
+      - run: ./build-fuzz/fuzz/fuzz_fingerprint -max_total_time=30 -print_final_stats=1
+      - run: ./build-fuzz/fuzz/fuzz_demux -max_total_time=60 -print_final_stats=1
