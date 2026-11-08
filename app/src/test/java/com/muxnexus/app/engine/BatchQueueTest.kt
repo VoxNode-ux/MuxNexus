@@ -109,7 +109,7 @@ class BatchQueueTest {
     }
 
     @Test fun `markDone clears error message`() {
-        queue.enqueue(job("a")); queue.markError("a", "temp"); queue.markDone("a")
+        queue.enqueue(job("a")); queue.markError("a", "temp"); queue.markDone("a", verified = false)
         val j = queue.loadAll().first()
         assertEquals(JobStatus.DONE, j.status)
         assertNull(j.errorMessage)
@@ -117,7 +117,7 @@ class BatchQueueTest {
 
     @Test fun `resetStaleRunning turns RUNNING back to PENDING`() {
         queue.enqueue(job("a")); queue.enqueue(job("b"))
-        queue.markRunning("a"); queue.markDone("b")
+        queue.markRunning("a"); queue.markDone("b", verified = false)
         queue.resetStaleRunning()
         val byId = queue.loadAll().associateBy { it.id }
         assertEquals(JobStatus.PENDING, byId["a"]!!.status)
@@ -126,7 +126,7 @@ class BatchQueueTest {
 
     @Test fun `pending filters out done and error jobs`() {
         queue.enqueue(job("a")); queue.enqueue(job("b")); queue.enqueue(job("c"))
-        queue.markDone("a"); queue.markError("b", "x")
+        queue.markDone("a", verified = false); queue.markError("b", "x")
         assertEquals(listOf("c"), queue.pending().map { it.id })
     }
 
