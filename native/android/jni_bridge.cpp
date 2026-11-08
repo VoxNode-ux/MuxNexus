@@ -1,6 +1,8 @@
 #include "../core/remux_core.h"
 
 #include <android/log.h>
+#include <cstdarg>
+#include <unistd.h>
 #include <jni.h>
 #include <pthread.h>
 #include <sched.h>
