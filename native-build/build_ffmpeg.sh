@@ -16,7 +16,6 @@ ABIS=(
   "arm64-v8a:aarch64-linux-android:arm64"
   "armeabi-v7a:armv7a-linux-androideabi:arm"
   "x86_64:x86_64-linux-android:x86_64"
-  "x86:i686-linux-android:x86"
 )
 
 clone_ffmpeg() {
@@ -65,7 +64,7 @@ build_android() {
       --cxx="${TOOLCHAIN}/bin/${triple}${API_LEVEL}-clang++" \
       --strip="${TOOLCHAIN}/bin/llvm-strip" \
       --sysroot="${TOOLCHAIN}/sysroot" \
-      --enable-cross-compile
+      --enable-cross-compile --disable-x86asm
 
     make -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
     make install
