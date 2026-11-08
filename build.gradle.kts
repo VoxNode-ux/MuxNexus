@@ -12,14 +12,14 @@ buildscript {
             classpath("org.jdom:jdom2:2.0.6.1") { because("XXE in JDOM (CVE-2021-33813)") }
             classpath("com.google.guava:guava:33.7.2-jre") { because("deserialization memory allocation DoS") }
             classpath("org.bitbucket.b_c:jose4j:0.9.6") { because("CVE-2024-29371, compressed JWE DoS") }
-            classpath("org.apache.commons:commons-lang3:3.18.0") { because("CVE-2025-48924, uncontrolled recursion") }
+            classpath("org.apache.commons:commons-lang3:3.21.0") { because("CVE-2025-48924, uncontrolled recursion") }
             classpath("org.apache.httpcomponents:httpclient:4.5.14") { because("CVE-2020-13956") }
         }
     }
 }
 
 plugins {
-    id("com.android.application") version "9.4.1" apply false
+    id("com.android.application") version "9.5.1" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.20" apply false
 }
 
