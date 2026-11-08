@@ -72,7 +72,17 @@ android {
     }
 
     testOptions {
-        unitTests.isIncludeAndroidResources = true
+        unitTests {
+            isIncludeAndroidResources = true
+            // Robolectric downloads its Android jar at test time. Maven Central often
+            // rejects (403/429) GitHub runner IPs, so use Google's Central mirror.
+            all { test ->
+                test.systemProperty(
+                    "robolectric.dependency.repo.url",
+                    "https://maven-central.storage-download.googleapis.com/maven2"
+                )
+            }
+        }
     }
 }
 
