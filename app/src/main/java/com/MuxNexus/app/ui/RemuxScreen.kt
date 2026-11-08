@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.*
@@ -623,7 +624,7 @@ private fun VerificationBadge(verified: Boolean) {
     val (icon, tint, cd) = if (verified)
         Triple(Icons.Filled.Verified, Color(0xFF2E7D32), "Verified")
     else
-        Triple(Icons.Filled.HelpOutline, MaterialTheme.colorScheme.onSurfaceVariant, "Not verified")
+        Triple(Icons.AutoMirrored.Filled.HelpOutline, MaterialTheme.colorScheme.onSurfaceVariant, "Not verified")
     Icon(icon, contentDescription = cd, tint = tint, modifier = Modifier.size(16.dp))
 }
 
