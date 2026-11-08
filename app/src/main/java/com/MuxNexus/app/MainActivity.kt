@@ -169,8 +169,8 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             } catch (t: Throwable) {
-                runCatching { android.system.Os.close(inputFd) }
-                runCatching { android.system.Os.close(outputFd) }
+                runCatching { android.os.ParcelFileDescriptor.adoptFd(inputFd).close() }
+                runCatching { android.os.ParcelFileDescriptor.adoptFd(outputFd).close() }
                 queue.markError(job.id, "Native start failed: ${t.message}")
                 vm.lastError = "Failed to start ${job.displayName}"
                 refreshQueue()
