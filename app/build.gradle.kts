@@ -48,10 +48,6 @@ android {
         debug {
             isMinifyEnabled = false
             isShrinkResources = false
-            ndk {
-                abiFilters.clear()
-                abiFilters += listOf("arm64-v8a")
-            }
         }
     }
 
