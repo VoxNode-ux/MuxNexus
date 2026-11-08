@@ -13,10 +13,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: "1.26"
-          cache: false
 
       - name: Look up commit SHAs for every GitHub Action in the workflows
         env:
@@ -40,17 +36,16 @@ jobs:
             fi
           done < refs.txt | tee actions-pinned.txt
 
-      - name: Look up exact versions of the Go tools used in workflows
+      - name: Look up commit SHAs for FFmpeg and doctest
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          ff_tag=$(grep -oE 'FFMPEG_VERSION="[^"]+"' native-build/build_ffmpeg.sh | cut -d'"' -f2)
+          dt_tag=$(grep -oE 'GIT_TAG +v[0-9.]+' native/tests/CMakeLists.txt | awk '{print $2}')
           {
-            go list -m github.com/CycloneDX/cyclonedx-gomod@latest
-            go list -m golang.org/x/vuln@latest
-          } | tee tools-pinned.txt
-
-      - name: Look up the Scorecard image digest
-        run: |
-          docker pull ghcr.io/ossf/scorecard:latest > /dev/null
-          docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ossf/scorecard:latest | tee scorecard-image.txt
+            echo "FFmpeg  $ff_tag  $(gh api "repos/FFmpeg/FFmpeg/commits/$ff_tag" --jq .sha 2>/dev/null || echo NOT FOUND)"
+            echo "doctest $dt_tag  $(gh api "repos/doctest/doctest/commits/$dt_tag" --jq .sha 2>/dev/null || echo NOT FOUND)"
+          } | tee native-pinned.txt
 
       - name: Show everything in one readable summary
         if: always()
@@ -60,13 +55,9 @@ jobs:
             echo '```'
             cat actions-pinned.txt 2>/dev/null || echo "(no result)"
             echo '```'
-            echo "## 2. Go tools (use these exact versions after the @ in go install)"
+            echo "## 2. Native deps (use the commit hash instead of the tag)"
             echo '```'
-            cat tools-pinned.txt 2>/dev/null || echo "(no result)"
-            echo '```'
-            echo "## 3. Scorecard image (use this instead of :latest)"
-            echo '```'
-            cat scorecard-image.txt 2>/dev/null || echo "(no result)"
+            cat native-pinned.txt 2>/dev/null || echo "(no result)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -77,7 +68,6 @@ jobs:
           name: pinned-versions
           path: |
             actions-pinned.txt
-            tools-pinned.txt
-            scorecard-image.txt
+            native-pinned.txt
           if-no-files-found: ignore
           retention-days: 30
