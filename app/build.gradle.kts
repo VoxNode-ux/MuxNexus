@@ -103,7 +103,26 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:core:1.7.0")
-    androidTestImplementation("androidx.test.ext:junit:1.4.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+}
+
+// Build-tool libraries that AGP's own tooling (Android Lint's androidLintTool,
+// R8, test platform, ...) pulls in transitively. They only run on the build
+// machine and are never packaged into the APK, but GitHub's dependency graph
+// sees them, so raise them to patched releases. The buildscript constraints in
+// the root build.gradle.kts do not reach these configurations.
+val patchedBuildToolLibs = listOf(
+    "org.bouncycastle:bcprov-jdk18on:1.86",
+    "org.bouncycastle:bcpkix-jdk18on:1.86",
+    "org.bouncycastle:bcutil-jdk18on:1.86",
+    "com.google.guava:guava:33.7.2-jre",
+    "org.apache.commons:commons-lang3:3.21.0",
+    "org.apache.httpcomponents:httpclient:4.5.14",
+)
+configurations.configureEach {
+    patchedBuildToolLibs.forEach { notation ->
+        dependencyConstraints.add(project.dependencies.constraints.create(notation))
+    }
 }
