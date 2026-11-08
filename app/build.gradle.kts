@@ -1,7 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -24,8 +22,6 @@ android {
         }
     }
 
-    // Per-ABI APKs. Roughly 3x smaller per download than a universal APK.
-    // A universal APK is still produced for users who don't know their ABI.
     splits {
         abi {
             isEnable = true
@@ -51,8 +47,6 @@ android {
         debug {
             isMinifyEnabled = false
             isShrinkResources = false
-            // Debug only builds the ABI of the dev phone / ARM emulator.
-            // This alone cuts a universal debug APK roughly in half.
             ndk {
                 abiFilters.clear()
                 abiFilters += listOf("arm64-v8a")
@@ -60,7 +54,6 @@ android {
         }
     }
 
-    // AAB splits for Play Store (each device downloads only what it needs).
     bundle {
         language { enableSplit = true }
         density { enableSplit = true }
@@ -75,10 +68,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
-    }
-
-    kotlinOptions {
-        jvmTarget = "21"
     }
 
     packaging {
