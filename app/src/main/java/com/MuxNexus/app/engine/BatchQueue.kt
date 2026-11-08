@@ -139,7 +139,7 @@ class BatchQueue(private val context: Context) {
         // commit=true -> synchronous, durability guaranteed before returning.
         // apply() is fast but can lose the write on process death; for a
         // queue that would leave a job permanently RUNNING.
-        return prefs.edit(commit = true) { putString(KEY_JOBS, arr.toString()) }
+        return prefs.edit().putString(KEY_JOBS, arr.toString()).commit()
     }
 
     companion object {
