@@ -9,9 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.muxnexus.app.engine.*
 import com.muxnexus.app.ui.theme.MuxNexusTheme
@@ -34,22 +32,14 @@ private class CreateDocumentWithType : ActivityResultContract<Pair<String, Strin
 class MainActivity : ComponentActivity() {
 
     private lateinit var queue: BatchQueue
-
-    private var progressState by mutableStateOf(RemuxProgress(RemuxState.IDLE))
-    private var jobs by mutableStateOf<List<RemuxJob>>(emptyList())
-    private var lastError by mutableStateOf<String?>(null)
-
-    private var jobHandle: Long = -1L
-    private var batchCancelled = false
+    private val vm: RemuxViewModel by viewModels()
 
     private var pendingFormat: OutputFormat = OutputFormat.MP4
     private var pendingInputUri: Uri? = null
 
     private val pickInput = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
-        runCatching {
-            queue.takePersistableUriPermission(contentResolver, uri, forWrite = false)
-        }
+        runCatching { queue.takePersistableUriPermission(contentResolver, uri, forWrite = false) }
         pendingInputUri = uri
         val suggested = displayName(uri).substringBeforeLast('.') + "." + pendingFormat.fileExtension
         pickOutput.launch(pendingFormat.mimeType to suggested)
@@ -59,9 +49,7 @@ class MainActivity : ComponentActivity() {
         val input = pendingInputUri
         pendingInputUri = null
         if (uri == null || input == null) return@registerForActivityResult
-        runCatching {
-            queue.takePersistableUriPermission(contentResolver, uri, forWrite = true)
-        }
+        runCatching { queue.takePersistableUriPermission(contentResolver, uri, forWrite = true) }
         queue.enqueue(
             RemuxJob(
                 id = UUID.randomUUID().toString(),
@@ -77,34 +65,34 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         queue = BatchQueue(applicationContext)
-        queue.resetStaleRunning()
         refreshQueue()
 
         lifecycleScope.launch {
             NativeBridge.telemetryFlow.collectLatest { sample ->
-                progressState = progressState.copy(lastSample = sample)
+                vm.progressState = vm.progressState.copy(lastSample = sample)
             }
         }
 
         setContent {
             MuxNexusTheme {
                 RemuxScreen(
-                    progress = progressState,
-                    queue = jobs,
-                    lastError = lastError,
-                    onDismissError = { lastError = null },
+                    progress = vm.progressState,
+                    queue = vm.jobs,
+                    lastError = vm.lastError,
+                    isDebugBuild = BuildConfig.DEBUG,
+                    onDismissError = { vm.lastError = null },
                     onPickInput = { format ->
                         pendingFormat = format
                         pickInput.launch(arrayOf("video/*", "audio/*"))
                     },
                     onStart = {
-                        batchCancelled = false
-                        lastError = null
+                        vm.batchCancelled = false
+                        vm.lastError = null
                         startNextJob()
                     },
                     onCancel = {
-                        batchCancelled = true
-                        if (jobHandle != -1L) NativeBridge.cancel(jobHandle)
+                        vm.batchCancelled = true
+                        if (vm.jobHandle != -1L) NativeBridge.cancel(vm.jobHandle)
                     },
                     onRemove = { id -> queue.remove(id); refreshQueue() },
                     onMoveUp = { id -> queue.moveUp(id); refreshQueue() },
@@ -114,89 +102,144 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun refreshQueue() {
-        jobs = queue.loadAll()
+    override fun onResume() {
+        super.onResume()
+        NativeCallbackRouter.listener = ::onNativeProgress
     }
 
+    override fun onPause() {
+        NativeCallbackRouter.listener = null
+        super.onPause()
+    }
+
+    private fun refreshQueue() {
+        vm.jobs = queue.loadAll()
+    }
+
+    /**
+     * Advances the batch. The `attempted` set guarantees termination even if
+     * persistence is silently failing — each job id is tried at most once per
+     * call, so no amount of state corruption can loop forever.
+     */
     private fun startNextJob() {
-        val job = queue.pending().firstOrNull()
-        if (job == null) {
-            progressState = RemuxProgress(RemuxState.IDLE, 0, "All files processed")
-            return
-        }
+        val attempted = mutableSetOf<String>()
+        var guard = 0
 
-        val inputPfd: android.os.ParcelFileDescriptor?
-        val outputPfd: android.os.ParcelFileDescriptor?
-        try {
-            inputPfd = contentResolver.openFileDescriptor(job.inputUri, "r")
-            outputPfd = contentResolver.openFileDescriptor(job.outputUri, "w")
-        } catch (e: Exception) {
-            queue.markError(job.id, "Can't open file: ${e.message}")
-            lastError = "Failed to open ${job.displayName}"
-            refreshQueue()
-            startNextJob()
-            return
-        }
-
-        if (inputPfd == null || outputPfd == null) {
-            inputPfd?.close()
-            outputPfd?.close()
-            queue.markError(job.id, "Can't open file")
-            lastError = "Failed to open ${job.displayName}"
-            refreshQueue()
-            startNextJob()
-            return
-        }
-
-        queue.markRunning(job.id)
-        refreshQueue()
-        progressState = RemuxProgress(RemuxState.READING_HEADERS, 0, job.displayName)
-
-        jobHandle = NativeBridge.startRemux(
-            inputFd = NativeBridge.withDupedFd(inputPfd),
-            outputFd = NativeBridge.withDupedFd(outputPfd),
-            outputFormat = job.format.ffmpegMuxerName,
-            onProgress = { state, percent, message ->
-                runOnUiThread { onNativeProgress(job, state, percent, message) }
+        while (guard++ < 100) {
+            val job = queue.pending().firstOrNull { it.id !in attempted } ?: run {
+                vm.progressState = RemuxProgress(RemuxState.IDLE, 0, "All files processed")
+                return
             }
-        )
+            attempted += job.id
+
+            val inputPfd = runCatching { contentResolver.openFileDescriptor(job.inputUri, "r") }.getOrNull()
+            val outputPfd = runCatching { contentResolver.openFileDescriptor(job.outputUri, "w") }.getOrNull()
+
+            if (inputPfd == null || outputPfd == null) {
+                inputPfd?.close(); outputPfd?.close()
+                // If persistence fails here, we still advance (job.id is in
+                // `attempted`) so the loop is guaranteed to terminate.
+                queue.markError(job.id, "Can't open file")
+                vm.lastError = "Failed to open ${job.displayName}"
+                refreshQueue()
+                continue
+            }
+
+            if (!queue.markRunning(job.id)) {
+                // Could not persist RUNNING: don't start the job, it would be
+                // invisible to the queue on the next launch.
+                inputPfd.close(); outputPfd.close()
+                vm.lastError = "Storage error persisting state"
+                refreshQueue()
+                return
+            }
+            refreshQueue()
+            vm.progressState = RemuxProgress(RemuxState.READING_HEADERS, 0, job.displayName)
+
+            val inputFd = NativeBridge.detachFd(inputPfd)
+            val outputFd = NativeBridge.detachFd(outputPfd)
+
+            val handle = try {
+                NativeBridge.startRemux(
+                    inputFd = inputFd,
+                    outputFd = outputFd,
+                    outputFormat = job.format.ffmpegMuxerName,
+                    onProgress = RemuxProgressCallback { state, percent, message ->
+                        NativeCallbackRouter.dispatch(job, state, percent, message)
+                    }
+                )
+            } catch (t: Throwable) {
+                runCatching { android.system.Os.close(inputFd) }
+                runCatching { android.system.Os.close(outputFd) }
+                queue.markError(job.id, "Native start failed: ${t.message}")
+                vm.lastError = "Failed to start ${job.displayName}"
+                refreshQueue()
+                continue
+            }
+
+            if (handle < 0) {
+                queue.markError(job.id, "Native callback setup failed")
+                vm.lastError = "Failed to start ${job.displayName}"
+                refreshQueue()
+                continue
+            }
+
+            vm.jobHandle = handle
+            return
+        }
+
+        // Guard exhausted: stop cleanly rather than spin.
+        vm.progressState = RemuxProgress(RemuxState.IDLE, 0, "Too many failures; check the queue")
+        vm.lastError = "Too many consecutive failures — batch stopped"
     }
 
     private fun onNativeProgress(job: RemuxJob, state: Int, percent: Int, message: String) {
         val remuxState = RemuxState.entries.getOrElse(state) { RemuxState.ERROR }
 
-        // A user-requested cancel comes back from the engine as ERROR("Cancelled").
-        // That isn't a failure: put the file back in the queue and go idle.
-        if (remuxState == RemuxState.ERROR && batchCancelled) {
-            jobHandle = -1L
-            queue.markPending(job.id)
-            refreshQueue()
-            progressState = RemuxProgress(RemuxState.IDLE, 0, "Cancelled")
-            return
-        }
-
-        progressState = progressState.copy(
-            state = remuxState,
-            percent = percent,
-            message = message.ifBlank { job.displayName }
-        )
-
         when (remuxState) {
-            RemuxState.DONE -> {
-                jobHandle = -1L  // the native job is finished; never cancel a stale handle
-                queue.markDone(job.id)
+            RemuxState.CANCELLED -> {
+                vm.jobHandle = -1L
+                if (vm.batchCancelled) {
+                    queue.markPending(job.id)
+                    vm.progressState = RemuxProgress(RemuxState.IDLE, 0, "Cancelled")
+                } else {
+                    queue.markError(job.id, "Cancelled unexpectedly")
+                    vm.lastError = "${job.displayName}: Cancelled unexpectedly"
+                }
                 refreshQueue()
-                if (!batchCancelled) startNextJob()
+            }
+            RemuxState.DONE -> {
+                vm.jobHandle = -1L
+                val verified = message.startsWith("Complete") && !message.contains("warnings")
+                queue.markDone(job.id, verified)
+                refreshQueue()
+                vm.progressState = vm.progressState.copy(
+                    state = RemuxState.DONE,
+                    percent = 100,
+                    message = message.ifBlank { job.displayName }
+                )
+                if (!vm.batchCancelled) startNextJob()
             }
             RemuxState.ERROR -> {
-                jobHandle = -1L
+                vm.jobHandle = -1L
                 val errMsg = message.ifBlank { "Failed" }
                 queue.markError(job.id, errMsg)
-                lastError = "${job.displayName}: $errMsg"
+                vm.lastError = "${job.displayName}: $errMsg"
                 refreshQueue()
-                if (!batchCancelled) startNextJob()
+                vm.progressState = vm.progressState.copy(
+                    state = RemuxState.ERROR,
+                    percent = 0,
+                    message = errMsg
+                )
+                if (!vm.batchCancelled) startNextJob()
             }
-            else -> Unit
+            else -> {
+                vm.progressState = vm.progressState.copy(
+                    state = remuxState,
+                    percent = percent,
+                    message = message.ifBlank { job.displayName }
+                )
+            }
         }
     }
 
