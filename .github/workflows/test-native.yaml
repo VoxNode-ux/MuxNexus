@@ -62,4 +62,4 @@ jobs:
         run: cmake -S native -B build-fuzz -G Ninja -DMUXNEXUS_BUILD_FUZZ=ON
       - run: cmake --build build-fuzz
       - run: ./build-fuzz/fuzz/fuzz_fingerprint -max_total_time=30 -print_final_stats=1
-      - run: ./build-fuzz/fuzz/fuzz_demux -max_total_time=60 -print_final_stats=1
+      - run: ./build-fuzz/fuzz/fuzz_demux -max_total_time=60 -print_final_stats=1 
