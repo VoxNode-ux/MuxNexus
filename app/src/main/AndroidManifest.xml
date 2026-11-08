@@ -4,7 +4,7 @@
     <!--
         Deliberately NO android.permission.INTERNET and no ACCESS_NETWORK_STATE.
         Their absence is enforced at the manifest level, on top of the
-        --disable-network flag used when compiling the native engine, so the
+        disable-network flag used when compiling the native engine, so the
         app is offline by construction, not just by convention.
     -->
 
