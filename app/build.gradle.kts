@@ -117,7 +117,6 @@ dependencies {
 val patchedBuildToolLibs = listOf(
     "org.bouncycastle:bcprov-jdk18on:1.86",
     "org.bouncycastle:bcpkix-jdk18on:1.86",
-    "org.bouncycastle:bcutil-jdk18on:1.86",
     "com.google.guava:guava:33.7.2-jre",
     "org.apache.commons:commons-lang3:3.21.0",
     "org.apache.httpcomponents:httpclient:4.5.14",
@@ -125,5 +124,20 @@ val patchedBuildToolLibs = listOf(
 configurations.matching { it.name == "androidLintTool" }.configureEach {
     patchedBuildToolLibs.forEach { notation ->
         dependencyConstraints.add(project.dependencies.constraints.create(notation))
+    }
+}
+
+// Robolectric puts bcprov 1.81 and guava 33.4.8 on the unit-test classpaths.
+// Raise just those two there. Build/test-time only, never packaged into the APK.
+configurations.matching { it.name.contains("UnitTest") }.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.bouncycastle" && requested.name == "bcprov-jdk18on") {
+            useVersion("1.86")
+            because("patched Bouncy Castle; Robolectric brings 1.81")
+        }
+        if (requested.group == "com.google.guava" && requested.name == "guava") {
+            useVersion("33.7.2-jre")
+            because("patched Guava; Robolectric brings 33.4.8")
+        }
     }
 }
