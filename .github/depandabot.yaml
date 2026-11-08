@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "android"]
+    groups:
+      androidx:
+        patterns: ["androidx.*"]
+        exclude-patterns: ["androidx.compose.*"]
+      compose:
+        patterns: ["androidx.compose.*"]
+      kotlin:
+        patterns: ["org.jetbrains.kotlin*"]
+      tests:
+        patterns: ["junit:*", "org.robolectric:*", "androidx.test*"]
+      # Major bumps isolated so they're easy to spot and review carefully.
+      major-updates:
+        update-types: ["major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
