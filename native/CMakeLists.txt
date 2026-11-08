@@ -34,6 +34,9 @@ if(ANDROID)
 else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil)
+    # The core library includes FFmpeg headers itself, so it needs the include
+    # paths too (macOS/Homebrew keeps them outside the default search path).
+    target_link_libraries(muxnexus_core PUBLIC PkgConfig::FFMPEG)
 
     add_executable(muxnexus desktop/main_desktop.cpp)
     target_link_libraries(muxnexus muxnexus_core PkgConfig::FFMPEG)
