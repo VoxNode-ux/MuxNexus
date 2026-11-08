@@ -409,7 +409,9 @@ RemuxResult RunRemux(int input_fd, int output_fd,
         result.issues.push_back({(int)i.severity, i.stream_desc, i.message, i.suggestion});
     }
 
-    bool verified = true;
+    // Only true after the output was re-opened and checked without failures.
+    bool verified = false;
+    bool verify_ran = false;
     const int64_t output_size = avio_tell(c.out->pb);
     const bool should_verify = options.verify_output &&
         !(options.skip_verification_for_large_outputs &&
@@ -433,6 +435,8 @@ RemuxResult RunRemux(int input_fd, int output_fd,
                     v_ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
                     if (avformat_open_input(&v_ctx, nullptr, nullptr, nullptr) >= 0) {
                         if (avformat_find_stream_info(v_ctx, nullptr) >= 0) {
+                            verify_ran = true;
+                            verified = true;
                             auto v_issues = VerifyOutput(c.out, v_ctx);
                             for (const auto& i : v_issues) {
                                 result.issues.push_back({(int)i.severity, i.stream_desc, i.message, i.suggestion});
@@ -462,7 +466,10 @@ RemuxResult RunRemux(int input_fd, int output_fd,
         result.message = "Input file is damaged; saved what could be read";
     } else {
         result.state = RemuxState::DONE;
-        result.message = verified ? "Complete" : "Complete (verification warnings)";
+        // Exact strings: the Kotlin side compares against "Complete".
+        result.message = verified ? "Complete"
+            : verify_ran ? "Complete (verification warnings)"
+                         : "Complete (not verified)";
     }
     return result;
 }
