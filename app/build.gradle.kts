@@ -108,11 +108,12 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
 
-// Build-tool libraries that AGP's own tooling (Android Lint's androidLintTool,
-// R8, test platform, ...) pulls in transitively. They only run on the build
-// machine and are never packaged into the APK, but GitHub's dependency graph
-// sees them, so raise them to patched releases. The buildscript constraints in
-// the root build.gradle.kts do not reach these configurations.
+// Libraries that Android Lint's own classpath (androidLintTool) pulls in
+// transitively. They only run on the build machine and are never packaged into
+// the APK, but GitHub's dependency graph sees them, so raise them to patched
+// releases. The buildscript constraints in the root build.gradle.kts do not
+// reach this configuration. Only this one configuration is targeted: Gradle
+// rejects constraints on others such as `archives`.
 val patchedBuildToolLibs = listOf(
     "org.bouncycastle:bcprov-jdk18on:1.86",
     "org.bouncycastle:bcpkix-jdk18on:1.86",
@@ -121,7 +122,7 @@ val patchedBuildToolLibs = listOf(
     "org.apache.commons:commons-lang3:3.21.0",
     "org.apache.httpcomponents:httpclient:4.5.14",
 )
-configurations.configureEach {
+configurations.matching { it.name == "androidLintTool" }.configureEach {
     patchedBuildToolLibs.forEach { notation ->
         dependencyConstraints.add(project.dependencies.constraints.create(notation))
     }
