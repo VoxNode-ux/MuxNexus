@@ -14,6 +14,8 @@ if(ANDROID)
     set(FFMPEG_ROOT ${CMAKE_SOURCE_DIR}/../app/src/main/cpp/ffmpeg)
     set(FFMPEG_LIB_DIR ${FFMPEG_ROOT}/${ANDROID_ABI}/lib)
     set(FFMPEG_INCLUDE_DIR ${FFMPEG_ROOT}/include)
+    # muxnexus_core itself includes FFmpeg headers (remux_core.cpp, remux_checks.cpp)
+    target_include_directories(muxnexus_core PUBLIC ${FFMPEG_INCLUDE_DIR})
 
     add_library(avformat STATIC IMPORTED)
     set_target_properties(avformat PROPERTIES IMPORTED_LOCATION ${FFMPEG_LIB_DIR}/libavformat.a)
