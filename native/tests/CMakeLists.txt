@@ -2,8 +2,7 @@ include(FetchContent)
 FetchContent_Declare(
     doctest
     GIT_REPOSITORY https://github.com/doctest/doctest.git
-    GIT_TAG v2.5.0
-    GIT_SHALLOW TRUE
+    GIT_TAG d44d4f6e66232d716af82f00a063759e9d0e50d6 # v2.5.0
 )
 FetchContent_MakeAvailable(doctest)
 
