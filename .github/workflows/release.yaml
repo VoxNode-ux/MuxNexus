@@ -84,9 +84,10 @@ jobs:
 
       - name: Build FFmpeg
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.0.12433566
-        run: ./native-build/build_ffmpeg.sh android
+        run: |
+          chmod +x native-build/build_ffmpeg.sh
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.0.12433566"
+          ./native-build/build_ffmpeg.sh android
 
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --console=plain
