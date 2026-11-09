@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     int in_fd = open(argv[1], O_RDONLY);
-    int out_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int out_fd = open(argv[2], O_RDWR | O_CREAT | O_TRUNC, 0644);
     if (in_fd < 0 || out_fd < 0) { perror("open"); return 1; }
 
     CliCallback cb;
