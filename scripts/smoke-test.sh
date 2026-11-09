@@ -18,7 +18,17 @@ cmake --build "$BUILD_DIR" --target muxnexus
 
 echo "==> Generating test file"
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+
+# When SMOKE_ARTIFACT_DIR is set (CI), keep the inputs, outputs and codec
+# reports there so the workflow can upload them, even when the test fails.
+collect_artifacts() {
+    if [ -n "${SMOKE_ARTIFACT_DIR:-}" ]; then
+        mkdir -p "$SMOKE_ARTIFACT_DIR"
+        cp -f "$TMP_DIR"/* "$SMOKE_ARTIFACT_DIR"/ 2>/dev/null || true
+    fi
+    rm -rf "$TMP_DIR"
+}
+trap collect_artifacts EXIT
 ffmpeg -hide_banner -loglevel error -y \
     -f lavfi -i "testsrc=size=320x240:rate=30:duration=3" \
     -f lavfi -i "sine=frequency=440:duration=3" \
