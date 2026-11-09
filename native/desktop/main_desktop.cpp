@@ -13,19 +13,6 @@
 #define close _close
 #endif
 
-namespace muxnexus {
-void LogError(const char* tag, const char* fmt, ...) {
-    va_list ap; va_start(ap, fmt);
-    fprintf(stderr, "[%s] ERROR: ", tag); vfprintf(stderr, fmt, ap); fprintf(stderr, "\n");
-    va_end(ap);
-}
-void LogInfo(const char* tag, const char* fmt, ...) {
-    va_list ap; va_start(ap, fmt);
-    fprintf(stdout, "[%s] ", tag); vfprintf(stdout, fmt, ap); fprintf(stdout, "\n");
-    va_end(ap);
-}
-} // namespace muxnexus
-
 class CliCallback : public muxnexus::RemuxCallback {
 public:
     void on_progress(muxnexus::RemuxState state, int percent, const std::string& msg) override {
