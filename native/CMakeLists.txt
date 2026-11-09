@@ -38,6 +38,10 @@ else()
     # paths too (macOS/Homebrew keeps them outside the default search path).
     target_link_libraries(muxnexus_core PUBLIC PkgConfig::FFMPEG)
 
+    # Log sinks that core calls (LogInfo/LogError); Android defines its own.
+    add_library(muxnexus_desktop_log STATIC desktop/log_desktop.cpp)
+    target_link_libraries(muxnexus_core INTERFACE muxnexus_desktop_log)
+
     add_executable(muxnexus desktop/main_desktop.cpp)
     target_link_libraries(muxnexus muxnexus_core PkgConfig::FFMPEG)
 
