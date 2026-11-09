@@ -15,19 +15,28 @@ concurrency:
 
 jobs:
   smoke:
-    name: CLI remux smoke test (Linux)
-    runs-on: ubuntu-24.04
+    name: CLI remux smoke test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - name: Install tools and FFmpeg dev libraries
+      - name: Install tools and FFmpeg dev libraries (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build pkg-config g++ ffmpeg \
             libavformat-dev libavcodec-dev libavutil-dev
+
+      - name: Install tools and FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja pkg-config ffmpeg
 
       - name: Run smoke test
         env:
@@ -38,7 +47,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: smoke-test-artifacts
+          name: smoke-test-artifacts-${{ matrix.os }}
           path: ${{ runner.temp }}/smoke-artifacts
           if-no-files-found: warn
           retention-days: 14
