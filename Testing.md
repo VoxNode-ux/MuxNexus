@@ -158,7 +158,7 @@ not enforced yet.
 | `test-android.yaml` | push to `main`, PRs | Kotlin unit tests; (instrumented tests disabled) |
 | `smoke-test.yaml` | push to `main`, PRs, manual | CLI smoke test on Ubuntu and macOS, with artifacts |
 | `codeql.yaml` | push/PR to `main`, weekly (Mon 06:00 UTC) | CodeQL static analysis |
-| `release.yaml` | version tags, manual | Lint, unit tests, then builds the APKs and CLI binaries; the CLI binaries are self-tested before release |
+| `release.yaml` | version tags, manual | Lint, unit tests, then builds the APKs and CLI binaries. Each CLI binary is self-tested: MP4/MOV/MKV output, then one input per extra format (TS, FLV, AVI, FLAC, WAV, Ogg, AC-3, MP3) |
 | `dependency-submission.yaml` | push to `main`, manual | Feeds the Gradle dependency graph to GitHub (Dependabot alerts) |
 | `nightly.yaml` | daily 04:00 UTC | Rebuilds the Android FFmpeg libraries |
 
