@@ -1,9 +1,11 @@
 name: test-android
 
+# Manual, plus one scheduled run every Monday. Does not run on push or pull request.
+# (Every push already runs the unit tests in build.yaml.)
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * 1'
 
 jobs:
   unit:
