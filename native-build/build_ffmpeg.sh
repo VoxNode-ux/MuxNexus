@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build FFmpeg for Android (all ABIs) or the host (Linux/macOS/FreeBSD).
 # Usage:
-#   ./build_ffmpeg.sh android      # arm64-v8a, armeabi-v7a, x86_64, x86
-#   ./build_ffmpeg.sh desktop      # host arch, static libs for the CLI
+#   ./build_ffmpeg.sh android      # arm64-v8a, armeabi-v7a, x86_64
+#   ./build_ffmpeg.sh desktop      # host arch, static libs for the CLI (build-desktop/)
 set -euo pipefail
 cd "$(dirname "$0")"
 cd ..
@@ -88,7 +88,8 @@ build_desktop() {
   clone_ffmpeg
   pushd ffmpeg-src >/dev/null
   make distclean >/dev/null 2>&1 || true
-  common_configure --prefix="$(pwd)/../build-desktop"
+  # --disable-x86asm: no nasm needed on CI; irrelevant for stream copying.
+  common_configure --prefix="$(pwd)/../build-desktop" --disable-x86asm
   make -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
   make install
   popd >/dev/null
