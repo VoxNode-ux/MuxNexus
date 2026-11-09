@@ -174,14 +174,14 @@ run (for example the output exceeded the 2 GiB verification limit), and
 
 | Build | Can read |
 |-------|----------|
-| **Android app and the released CLI** (the project's own minimal, pinned FFmpeg) | MP4 / MOV / M4A-style files, Matroska / WebM, and raw ADTS AAC |
+| **Android app and the released CLI** (the project's own minimal, pinned FFmpeg) | Containers: MP4 / MOV / M4A, Matroska / WebM, MPEG-TS, MPEG-PS, AVI, FLV, Ogg, ASF (WMV/WMA). Audio files: FLAC, WAV, AIFF, MP3, AC-3, E-AC-3, DTS, DTS-HD, TrueHD, Monkey's Audio, WavPack, CAF, raw ADTS AAC. Raw H.264 and HEVC streams |
 | **A CLI you build yourself** against your system FFmpeg | Whatever that FFmpeg can demux (TS, AVI, FLV, Ogg, ...) |
 
-The minimal build is deliberate: fewer demuxers means a smaller binary and a
-smaller attack surface for untrusted files. The container sniffer recognises
-several formats the minimal build can't open (for example MPEG-TS, AVI, FLV,
-Ogg, WAV). For those it identifies the file, but the demuxer then fails with an
-error.
+The minimal build is deliberate: every demuxer is code that parses untrusted
+files, so only the formats above are compiled in (the list is
+`DEMUXERS` in `native-build/build_ffmpeg.sh`). Anything else (RealMedia,
+DVD/Blu-ray structures, ...) fails with a clear error. The magic-byte sniffer is
+only a first-pass hint; FFmpeg's demuxer has the final say.
 
 **What gets copied:** video (except embedded cover art), audio, and, for MKV
 output only, subtitles. Stream metadata and global metadata are kept.
@@ -227,7 +227,7 @@ flowchart LR
   and writes through custom I/O callbacks on raw file descriptors (`pread` /
   `pwrite`), which is what lets it work with Android's SAF descriptors without
   ever needing a file path. Streams are copied packet by packet in a single
-  pass. Only two bitstream filters are used: `hevc_mp4toannexb` when putting
+  pass. Our code applies only two bitstream filters: `hevc_mp4toannexb` when putting
   HEVC into MP4/MOV, and `aac_adtstoasc` for raw ADTS AAC input.
 - **JNI bridge** (`native/android/`): runs each job on its own thread, pins that
   thread to the upper half of the CPU cores as a heuristic for the performance
@@ -273,7 +273,7 @@ is younger. Here is what you should know before relying on it:
 **Limits by design (for now)**
 
 - It remuxes only. No transcoding, trimming, merging or editing.
-- The Android build reads MP4/MOV, Matroska/WebM and ADTS AAC only (see above).
+- Only the input formats listed above are compiled into the Android build.
 - Chapters, attachments, data tracks and cover art are dropped.
 - **Resume is groundwork only.** The engine can compute a checkpoint when a job
   is cancelled (off by default, and the app doesn't enable it), but nothing
@@ -318,8 +318,8 @@ downloads Gradle 9.8.2 itself.
 The FFmpeg step clones the source **at a pinned commit** and refuses to build if
 the commit doesn't match (see `FFMPEG_COMMIT` in `native-build/build_ffmpeg.sh`),
 so the exact source behind a binary is known. It enables only what MuxNexus
-needs: the `mov`, `matroska` and `aac` demuxers; the `mp4`, `mov` and
-`matroska` muxers; and two bitstream filters.
+needs: the demuxers for the input formats listed above; the `mp4`, `mov` and
+`matroska` muxers; and three small bitstream filters.
 
 ### Desktop CLI
 
