@@ -1,0 +1,44 @@
+name: Smoke test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: CLI remux smoke test (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install tools and FFmpeg dev libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build pkg-config g++ ffmpeg \
+            libavformat-dev libavcodec-dev libavutil-dev
+
+      - name: Run smoke test
+        env:
+          SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/smoke-artifacts
+        run: bash scripts/smoke-test.sh
+
+      - name: Upload smoke test artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: smoke-test-artifacts
+          path: ${{ runner.temp }}/smoke-artifacts
+          if-no-files-found: warn
+          retention-days: 14
