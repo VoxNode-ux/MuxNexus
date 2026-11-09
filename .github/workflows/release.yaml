@@ -1,276 +1,57 @@
 name: Release
 
+# Manual only: Actions tab -> Release -> Run workflow -> type the version (e.g. 1.0.0).
+# It builds the files and creates the GitHub Release with them attached.
 on:
-  push:
-    tags: ['v*.*.*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. 1.0.0 or v1.0.0-beta.1 (created if it does not exist)'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+# Never cancel a release that is already running.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  lint:
-    name: Lint
+  validate:
+    name: Check tag
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
-        with:
-          gradle-version: '9.8.2'
-      - name: Install NDK + CMake
+      - id: t
+        name: Tag must look like 1.2.3, v1.2.3 or 1.2.3-beta.1
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "ndk;28.2.13676358" "cmake;3.22.1" > /dev/null
-      - name: Run Android Lint
-        run: ./gradlew :app:lintDebug --no-daemon --console=plain
-
-  test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
-        with:
-          gradle-version: '9.8.2'
-      - name: Install NDK + CMake
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "ndk;28.2.13676358" "cmake;3.22.1" > /dev/null
-      - name: Run Unit Tests
-        run: ./gradlew :app:testDebugUnitTest --no-daemon --console=plain
-      - name: Upload test report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: unit-test-report
-          path: app/build/reports/tests/
-
-
-  build-android:
-    name: Android APKs (arm64-v8a, armeabi-v7a, x86_64, universal)
-    needs: [lint, test]
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
-        with:
-          gradle-version: '9.8.2'
-      - name: Install NDK + CMake
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "ndk;28.2.13676358" "cmake;3.22.1" > /dev/null
-
-      - name: Cache FFmpeg static libs
-        id: ffmpeg-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: app/src/main/cpp/ffmpeg
-          key: ffmpeg-n6.1.6-abi3-v2
-
-      - name: Build FFmpeg
-        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        run: |
-          chmod +x native-build/build_ffmpeg.sh
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
-          ./native-build/build_ffmpeg.sh android
-
-      - name: Build debug APKs
-        run: ./gradlew :app:assembleDebug --no-daemon --console=plain
-
-      - name: Compute checksums
-        working-directory: app/build/outputs/apk/debug
-        run: |
-          for f in *.apk; do sha256sum "$f" > "$f.sha256"; done
-
-      - name: Verify the full APK set was built
-        working-directory: app/build/outputs/apk/debug
-        run: |
-          # 3 ABI splits + the universal APK, each with a checksum file.
-          for abi in arm64-v8a armeabi-v7a x86_64 universal; do
-            apk=$(ls ./*"$abi"*.apk 2>/dev/null | head -n1 || true)
-            if [ -z "$apk" ]; then
-              echo "::error::Missing APK for $abi"; ls -la; exit 1
-            fi
-            [ -f "$apk.sha256" ] || { echo "::error::Missing checksum for $apk"; exit 1; }
-            echo "ok: $apk"
-          done
-
-      - name: APK size report
-        working-directory: app/build/outputs/apk/debug
-        run: |
-          {
-            echo "## APK sizes"
-            echo '```'
-            ls -l ./*.apk | awk '{printf "%6.1f MB  %s\n", $5/1048576, $9}'
-            echo '```'
-            f=$(ls ./*arm64-v8a*.apk | head -n1)
-            echo "## Largest entries in $f (compressed bytes)"
-            echo '```'
-            unzip -lv "$f" | awk '$1 ~ /^[0-9]+$/ && NF>=8 {print $3, $8}' | sort -nr | head -15
-            echo '```'
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload Android files
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: release-android
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/debug/*.sha256
-          if-no-files-found: error
-          retention-days: 14
-
-  build-cli:
-    name: CLI (${{ matrix.name }})
-    needs: [lint, test]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: linux-x86_64, os: ubuntu-24.04 }
-          - { name: linux-arm64,  os: ubuntu-24.04-arm }
-          - { name: macos-arm64,  os: macos-latest }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      # FFmpeg itself is built from source below, so only build tools here.
-      - name: Install build tools (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config git
-
-      - name: Install build tools (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake ninja pkg-config
-
-      - name: Cache static FFmpeg (desktop)
-        id: ffmpeg-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: build-desktop
-          key: ffmpeg-n6.1.6-desktop-${{ matrix.name }}-v2
-
-      - name: Build static FFmpeg (pinned commit, network and protocols stripped)
-        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        run: bash native-build/build_ffmpeg.sh desktop
-
-      - name: Build the CLI against the static FFmpeg
-        run: |
-          export PKG_CONFIG_PATH="$PWD/build-desktop/lib/pkgconfig"
-          cmake -S native -B build-cli -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DMUXNEXUS_BUILD_TESTS=OFF \
-            -DPKG_CONFIG_ARGN=--static
-          cmake --build build-cli --target muxnexus
-
-      - name: Check the binary is self-contained
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            ldd build-cli/muxnexus
-            if ldd build-cli/muxnexus | grep -q 'libav'; then
-              echo "::error::CLI links FFmpeg dynamically"; exit 1
-            fi
-          else
-            otool -L build-cli/muxnexus
-            if otool -L build-cli/muxnexus | grep -Eq 'libav|/opt/homebrew|/usr/local'; then
-              echo "::error::CLI links FFmpeg or Homebrew libraries dynamically"; exit 1
-            fi
+          TAG="$INPUT_TAG"
+          if ! [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid tag '$TAG'. Use e.g. 1.0.0 or v1.0.0"; exit 1
           fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      # The ffmpeg program is installed only now, only to create a test input.
-      - name: Install ffmpeg (test input generator)
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y ffmpeg; else brew install ffmpeg; fi
-
-      - name: Self-test the built binary
-        run: |
-          ffmpeg -hide_banner -loglevel error -y \
-            -f lavfi -i "testsrc=size=320x240:rate=30:duration=1" \
-            -f lavfi -i "sine=frequency=440:duration=1" \
-            -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -shortest \
-            "$RUNNER_TEMP/in.mp4"
-          for fmt in matroska mp4 mov; do
-            ext=$([ "$fmt" = matroska ] && echo mkv || echo "$fmt")
-            build-cli/muxnexus "$RUNNER_TEMP/in.mp4" "$RUNNER_TEMP/out.$ext" "$fmt" 2>&1 | tee "$RUNNER_TEMP/log.txt"
-            grep -aq '^Result: Complete$' "$RUNNER_TEMP/log.txt" \
-              || { echo "::error::$fmt remux was not reported as verified Complete"; exit 1; }
-          done
-
-      - name: Self-test input formats
-        run: |
-          mkdir -p "$RUNNER_TEMP/fmt" && cd "$RUNNER_TEMP/fmt"
-          V=(-f lavfi -i "testsrc=size=320x240:rate=30:duration=1")
-          A=(-f lavfi -i "sine=frequency=440:duration=1")
-          H264=(-c:v libx264 -preset ultrafast -pix_fmt yuv420p)
-          gen() { ffmpeg -hide_banner -loglevel error -y "$@"; }
-          gen "${V[@]}" "${A[@]}" "${H264[@]}" -c:a aac -shortest -f mpegts in.ts
-          gen "${V[@]}" "${A[@]}" "${H264[@]}" -c:a aac -shortest in.flv
-          gen "${V[@]}" "${A[@]}" -c:v mpeg4 -c:a libmp3lame -shortest in.avi
-          gen "${A[@]}" -c:a flac in.flac
-          gen "${A[@]}" -c:a pcm_s16le in.wav
-          gen "${A[@]}" -c:a libvorbis in.ogg
-          gen "${A[@]}" -c:a ac3 in.ac3
-          gen "${A[@]}" -c:a libmp3lame in.mp3
-          failed=0
-          for f in in.*; do
-            "$GITHUB_WORKSPACE/build-cli/muxnexus" "$f" "out-$f.mkv" matroska > log.txt 2>&1 || true
-            if grep -aq '^Result: Complete$' log.txt; then echo "ok:   $f"; else echo "FAIL: $f"; cat log.txt; failed=1; fi
-          done
-          exit $failed
-
-      - name: Package
-        run: |
-          tag="${GITHUB_REF_NAME//\//-}"
-          dir="muxnexus-cli-${tag}-${{ matrix.name }}"
-          mkdir -p "dist/$dir"
-          cp build-cli/muxnexus LICENSE README.md "dist/$dir/"
-          tar -C dist -czf "dist/$dir.tar.gz" "$dir"
-          (cd dist && shasum -a 256 "$dir.tar.gz" > "$dir.tar.gz.sha256")
-          ls -la dist
-
-      - name: Upload CLI files
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: release-cli-${{ matrix.name }}
-          path: |
-            dist/*.tar.gz
-            dist/*.sha256
-          if-no-files-found: error
-          retention-days: 14
+  build:
+    name: Build
+    needs: validate
+    uses: ./.github/workflows/build.yaml
+    permissions:
+      contents: read
+    with:
+      build_cli: true
+      version: ${{ needs.validate.outputs.tag }}
 
   publish:
     name: Attest & publish
-    needs: [build-android, build-cli]
-    # The APKs are the primary product: publish them even if an experimental
-    # desktop CLI build failed (its artifact is then simply missing).
-    if: ${{ always() && needs.build-android.result == 'success' }}
+    needs: [validate, build]
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # create the release
+      contents: write       # create / update the release
       actions: read         # download this run's artifacts with gh
       id-token: write       # sign the provenance attestation
       attestations: write   # store the attestation
@@ -280,7 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --dir dl --pattern 'release-*'
+            --dir dl --pattern 'build-*'
           mkdir release-files
           find dl -type f -exec cp {} release-files/ \;
           ls -la release-files
@@ -295,25 +76,19 @@ jobs:
           echo "CLI archives present:"; ls ./*.tar.gz 2>/dev/null || echo "(none - desktop builds failed)"
 
       - name: Attest build provenance
-        if: ${{ startsWith(github.ref, 'refs/tags/') && !github.event.repository.private }}
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: |
             release-files/*.apk
             release-files/*.tar.gz
 
-      - name: Keep the files (manual runs)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: release-files
-          path: release-files/
-          retention-days: 14
-
       - name: Create GitHub Release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: MuxNexus ${{ needs.validate.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: |
             release-files/*.apk
             release-files/*.tar.gz
@@ -321,5 +96,5 @@ jobs:
           fail_on_unmatched_files: true
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.validate.outputs.tag, '-') }}
           overwrite_files: true
