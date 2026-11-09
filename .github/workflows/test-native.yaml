@@ -19,7 +19,7 @@ jobs:
             libavformat-dev libavcodec-dev libavutil-dev
       - run: cmake -S native -B build -G Ninja -DMUXNEXUS_BUILD_TESTS=ON
       - run: cmake --build build
-      - run: ./native/tests/fixtures/generate.sh
+      - run: bash ./native/tests/fixtures/generate.sh
       - run: ctest --test-dir build --output-on-failure
 
   macos:
@@ -29,7 +29,7 @@ jobs:
       - run: brew install cmake ninja pkg-config ffmpeg
       - run: cmake -S native -B build -G Ninja -DMUXNEXUS_BUILD_TESTS=ON
       - run: cmake --build build
-      - run: ./native/tests/fixtures/generate.sh
+      - run: bash ./native/tests/fixtures/generate.sh
       - run: ctest --test-dir build --output-on-failure
 
   freebsd:
@@ -43,7 +43,7 @@ jobs:
           run: |
             cmake -S native -B build -G Ninja -DMUXNEXUS_BUILD_TESTS=ON
             cmake --build build
-            ./native/tests/fixtures/generate.sh
+            bash ./native/tests/fixtures/generate.sh
             ctest --test-dir build --output-on-failure
 
   fuzz:
@@ -62,4 +62,4 @@ jobs:
         run: cmake -S native -B build-fuzz -G Ninja -DMUXNEXUS_BUILD_FUZZ=ON
       - run: cmake --build build-fuzz
       - run: ./build-fuzz/fuzz/fuzz_fingerprint -max_total_time=30 -print_final_stats=1
-      - run: ./build-fuzz/fuzz/fuzz_demux -max_total_time=60 -print_final_stats=1 
+      - run: ./build-fuzz/fuzz/fuzz_demux -max_total_time=60 -print_final_stats=1
