@@ -99,13 +99,16 @@ TEST_CASE("Fingerprint: MPEG-TS (0x47 at stride 188)") {
 }
 
 TEST_CASE("Fingerprint: FLV") {
-    std::vector<uint8_t> data = {'F','L','V', 0x01, 0x05, 0x00, 0x00, 0x00, 0x09};
+    // 9-byte FLV header + 4-byte PreviousTagSize0 (the fingerprinter needs >= 12 bytes).
+    std::vector<uint8_t> data = {'F','L','V', 0x01, 0x05, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x00};
     auto fp = fingerprint_of(data);
     CHECK(fp.kind == ContainerKind::FLV);
 }
 
 TEST_CASE("Fingerprint: Ogg") {
+    // Real Ogg page headers are 27+ bytes; the fingerprinter needs >= 12 bytes.
     std::vector<uint8_t> data = {'O','g','g','S', 0x00, 0x02, 0x00, 0x00};
+    data.resize(27, 0);
     auto fp = fingerprint_of(data);
     CHECK(fp.kind == ContainerKind::OGG);
 }
