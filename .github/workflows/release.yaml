@@ -84,7 +84,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: app/src/main/cpp/ffmpeg
-          key: ffmpeg-n6.1.6-abi3-v1
+          key: ffmpeg-n6.1.6-abi3-v2
 
       - name: Build FFmpeg
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
@@ -113,6 +113,21 @@ jobs:
             [ -f "$apk.sha256" ] || { echo "::error::Missing checksum for $apk"; exit 1; }
             echo "ok: $apk"
           done
+
+      - name: APK size report
+        working-directory: app/build/outputs/apk/debug
+        run: |
+          {
+            echo "## APK sizes"
+            echo '```'
+            ls -l ./*.apk | awk '{printf "%6.1f MB  %s\n", $5/1048576, $9}'
+            echo '```'
+            f=$(ls ./*arm64-v8a*.apk | head -n1)
+            echo "## Largest entries in $f (compressed bytes)"
+            echo '```'
+            unzip -lv "$f" | awk '$1 ~ /^[0-9]+$/ && NF>=8 {print $3, $8}' | sort -nr | head -15
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Android files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -157,7 +172,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: build-desktop
-          key: ffmpeg-n6.1.6-desktop-${{ matrix.name }}-v1
+          key: ffmpeg-n6.1.6-desktop-${{ matrix.name }}-v2
 
       - name: Build static FFmpeg (pinned commit, network and protocols stripped)
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
@@ -204,6 +219,28 @@ jobs:
             grep -aq '^Result: Complete$' "$RUNNER_TEMP/log.txt" \
               || { echo "::error::$fmt remux was not reported as verified Complete"; exit 1; }
           done
+
+      - name: Self-test input formats
+        run: |
+          mkdir -p "$RUNNER_TEMP/fmt" && cd "$RUNNER_TEMP/fmt"
+          V=(-f lavfi -i "testsrc=size=320x240:rate=30:duration=1")
+          A=(-f lavfi -i "sine=frequency=440:duration=1")
+          H264=(-c:v libx264 -preset ultrafast -pix_fmt yuv420p)
+          gen() { ffmpeg -hide_banner -loglevel error -y "$@"; }
+          gen "${V[@]}" "${A[@]}" "${H264[@]}" -c:a aac -shortest -f mpegts in.ts
+          gen "${V[@]}" "${A[@]}" "${H264[@]}" -c:a aac -shortest in.flv
+          gen "${V[@]}" "${A[@]}" -c:v mpeg4 -c:a libmp3lame -shortest in.avi
+          gen "${A[@]}" -c:a flac in.flac
+          gen "${A[@]}" -c:a pcm_s16le in.wav
+          gen "${A[@]}" -c:a libvorbis in.ogg
+          gen "${A[@]}" -c:a ac3 in.ac3
+          gen "${A[@]}" -c:a libmp3lame in.mp3
+          failed=0
+          for f in in.*; do
+            "$GITHUB_WORKSPACE/build-cli/muxnexus" "$f" "out-$f.mkv" matroska > log.txt 2>&1 || true
+            if grep -aq '^Result: Complete$' log.txt; then echo "ok:   $f"; else echo "FAIL: $f"; cat log.txt; failed=1; fi
+          done
+          exit $failed
 
       - name: Package
         run: |
