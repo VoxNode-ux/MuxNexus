@@ -22,7 +22,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: app/src/main/cpp/ffmpeg
-          key: ffmpeg-n6.1.6-abi3-v1
+          key: ffmpeg-n6.1.6-abi3-v2
       - name: FFmpeg
         run: |
           chmod +x native-build/build_ffmpeg.sh
