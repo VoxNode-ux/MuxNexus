@@ -31,6 +31,18 @@ clone_ffmpeg() {
   fi
 }
 
+# Input formats. Output stays mp4/mov/matroska. Every demuxer is parser code
+# that reads untrusted files, so this list is deliberately short.
+#   containers : mov (mp4/m4a/m4v), matroska (mkv/webm), mpegts, mpegps, avi,
+#                flv, ogg, asf (wmv/wma)
+#   audio files: mp3, wav, aiff, flac, ac3, eac3, dts, dtshd, truehd, ape, wv,
+#                caf, aac (raw ADTS)
+#   raw video  : h264, hevc
+DEMUXERS=(mov matroska aac mpegts mpegps avi flv ogg asf mp3 wav aiff flac
+          ac3 eac3 dts dtshd truehd ape wv caf h264 hevc)
+DEMUXER_FLAGS=()
+for d in "${DEMUXERS[@]}"; do DEMUXER_FLAGS+=("--enable-demuxer=${d}"); done
+
 common_configure() {
   ./configure \
     --disable-shared --enable-static --enable-pic \
@@ -41,8 +53,9 @@ common_configure() {
     --enable-muxer=mp4 --enable-muxer=mov --enable-muxer=matroska \
     --disable-decoders --disable-bsfs \
     --enable-bsf=aac_adtstoasc --enable-bsf=hevc_mp4toannexb \
+    --enable-bsf=extract_extradata \
     --disable-demuxers \
-    --enable-demuxer=mov --enable-demuxer=matroska --enable-demuxer=aac \
+    "${DEMUXER_FLAGS[@]}" \
     --disable-indevs --disable-outdevs "$@"
 }
 
