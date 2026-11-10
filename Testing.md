@@ -10,7 +10,7 @@ what it covers, how to run it, whether CI runs it, and what it cannot tell you.
 | 1 | Smoke test (CLI end to end) | `scripts/smoke-test.sh` | On demand (`smoke-test.yaml`, manual; Linux + macOS) | `ffmpeg` (with libx264, ideally libvorbis), `cmake`, `ninja`, `pkg-config`, FFmpeg dev libs, C++17 compiler |
 | 2 | C++ unit tests (24 cases) | `native/tests/test_checks.cpp` | Yes (`test-native.yaml`: Linux, macOS, FreeBSD) | FFmpeg dev libs, `cmake`, `ninja` |
 | 3 | C++ integration tests (6 cases) | `native/tests/test_integration.cpp` | Yes (same workflow) | Fixtures from `generate.sh` (needs the `ffmpeg` program) |
-| 3b | C++ merge tests (13 cases: 5 unit, 8 integration) | `native/tests/test_merge.cpp` | Yes (same workflow) | Same fixtures |
+| 3b | C++ merge tests (14 cases: 5 unit, 9 integration) | `native/tests/test_merge.cpp` | Yes (same workflow) | Same fixtures |
 | 4 | Fuzzing (2 libFuzzer targets) | `native/fuzz/` | Yes, on PRs and `main` (Linux, clang) | `clang`, FFmpeg dev libs |
 | 5 | Kotlin unit tests (25 cases) | `app/src/test/` | Yes (`build.yaml`, on every push; also `test-android.yaml`, manual + weekly) | JDK 21, Android SDK + NDK (Gradle drives it) |
 | 6 | Android instrumented tests (3 cases) | `app/src/androidTest/` | **No. The job is switched off (`if: false`).** | Emulator or device, plus a full FFmpeg build |
@@ -116,6 +116,10 @@ Run with `ctest --test-dir build --output-on-failure -R merge`.
   packet's payload and requires the output's video hash to equal video A's and
   its audio hash to equal video B's. That is the "no re-encoding" claim, checked
   bit for bit.
+- **Default trimming**: with the default options, audio is cut at the end of the
+  video (at most a few packets), and never extended past it. The exact-copy tests
+  above switch trimming off (`end_with_video = false`) so every packet is
+  compared.
 - **Best of several tracks**: a file with AAC 64k, FLAC and AC-3 192k keeps only
   the FLAC.
 - **Lossless file + video** into MKV, hash-checked.
