@@ -65,6 +65,26 @@ else
     echo "SKIP: libvorbis unavailable"
 fi
 
+echo "==> Merging: picture of in.mp4 + best audio of a FLAC file"
+ffmpeg -hide_banner -loglevel error -y \
+    -f lavfi -i "sine=frequency=880:sample_rate=48000:duration=3" \
+    -c:a flac "$TMP_DIR/lossless.flac"
+PROBE_OUT="$("$BUILD_DIR/muxnexus" probe "$TMP_DIR/lossless.flac")"
+echo "$PROBE_OUT" | grep -q "Best audio: #0 (flac)" || {
+    echo "FAIL: probe did not report FLAC as the best audio" >&2
+    echo "$PROBE_OUT" >&2; exit 1
+}
+"$BUILD_DIR/muxnexus" merge "$TMP_DIR/merged.mkv" matroska \
+    "$TMP_DIR/in.mp4:v" "$TMP_DIR/lossless.flac:best"
+ffprobe -hide_banner -loglevel error -show_entries stream=codec_name -of csv \
+    "$TMP_DIR/merged.mkv" | sort > "$TMP_DIR/codecs_merged"
+grep -q "h264" "$TMP_DIR/codecs_merged" && grep -q "flac" "$TMP_DIR/codecs_merged" \
+    && ! grep -q "aac" "$TMP_DIR/codecs_merged" || {
+    echo "FAIL: merged file should hold h264 + flac and no aac" >&2
+    cat "$TMP_DIR/codecs_merged" >&2; exit 1
+}
+echo "PASS: merge copied the picture and the FLAC audio"
+
 echo
 echo "=========================================="
 echo "SMOKE TEST PASSED"
