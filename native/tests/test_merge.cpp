@@ -181,7 +181,9 @@ TEST_CASE("Audio swap: picture of A + audio of B, copied bit for bit") {
     MergeInput ia; ia.fd = fa.fd; ia.picks = {pick(StreamPick::Kind::VIDEO)};
     MergeInput ib; ib.fd = fb.fd; ib.picks = {pick(StreamPick::Kind::AUDIO)};
     NullCallback cb;
-    RemuxResult r = RunMerge({ia, ib}, fo.fd, "matroska", &cb, nullptr);
+    MergeOptions keep_all;
+    keep_all.end_with_video = false;    // copy ALL of B's audio, so the hash can match exactly
+    RemuxResult r = RunMerge({ia, ib}, fo.fd, "matroska", &cb, nullptr, keep_all);
     CHECK(r.state == RemuxState::DONE);
     CHECK(r.message == "Complete");
     CHECK(r.output_verified);
@@ -195,6 +197,28 @@ TEST_CASE("Audio swap: picture of A + audio of B, copied bit for bit") {
     CHECK(res.audio_hash == in_b.audio_hash);     // sound from B, untouched
     CHECK(res.video_packets == in_a.video_packets);
     CHECK(res.audio_packets == in_b.audio_packets);
+}
+
+TEST_CASE("Default: audio is cut at the end of the video, not before it") {
+    auto a = fixture("merge_video.mp4");   // exactly 2.0 s of video
+    auto b = fixture("swap_b.mkv");        // ~2.0 s of AAC, a little longer
+    if (a.empty() || b.empty()) return;
+
+    FdGuard fa(open_read(a)), fb(open_read(b));
+    Output out; out.path = "/tmp/muxnexus_merge_cut.mkv";
+    FdGuard fo(open_write(out.path));
+    REQUIRE(fa.fd >= 0); REQUIRE(fb.fd >= 0); REQUIRE(fo.fd >= 0);
+
+    MergeInput ia; ia.fd = fa.fd; ia.picks = {pick(StreamPick::Kind::VIDEO)};
+    MergeInput ib; ib.fd = fb.fd; ib.picks = {pick(StreamPick::Kind::AUDIO)};
+    NullCallback cb;
+    RemuxResult r = RunMerge({ia, ib}, fo.fd, "matroska", &cb, nullptr);   // default options
+    CHECK(r.state == RemuxState::DONE);
+
+    Content in_b = read_content(b), res = read_content(out.path);
+    CHECK(res.audio_packets <= in_b.audio_packets);          // never more than B has
+    CHECK(res.audio_packets >= in_b.audio_packets - 3);      // at most a few packets cut
+    CHECK(res.duration_s <= 2.15);                           // and it ends with the video
 }
 
 TEST_CASE("Multiple audio tracks: keep only the best one") {
@@ -232,7 +256,9 @@ TEST_CASE("Lossless audio file + video, MKV output") {
     MergeInput iv; iv.fd = fv.fd;                           // default picks: all of it
     MergeInput ia; ia.fd = fa.fd; ia.picks = {pick(StreamPick::Kind::BEST_AUDIO)};
     NullCallback cb;
-    RemuxResult r = RunMerge({iv, ia}, fo.fd, "matroska", &cb, nullptr);
+    MergeOptions keep_all;
+    keep_all.end_with_video = false;    // copy the whole FLAC so the hash can match exactly
+    RemuxResult r = RunMerge({iv, ia}, fo.fd, "matroska", &cb, nullptr, keep_all);
     CHECK(r.state == RemuxState::DONE);
     CHECK(r.output_verified);
 
