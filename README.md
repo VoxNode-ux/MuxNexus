@@ -393,7 +393,11 @@ The FFmpeg step clones the source **at a pinned commit** and refuses to build if
 the commit doesn't match (see `FFMPEG_COMMIT` in `native-build/build_ffmpeg.sh`),
 so the exact source behind a binary is known. It enables only what MuxNexus
 needs: the demuxers for the input formats listed above; the `mp4`, `mov` and
-`matroska` muxers; and three small bitstream filters.
+`matroska` muxers; three small bitstream filters; and **one decoder, AAC**.
+MPEG-TS and raw AAC files don't store the channel count or sample rate, so
+FFmpeg has to decode the first audio frame to learn them. The decoder is used
+only while probing; packets are still copied untouched. It is extra code that
+parses untrusted audio, which is why it is the only decoder.
 
 ### Desktop CLI
 
