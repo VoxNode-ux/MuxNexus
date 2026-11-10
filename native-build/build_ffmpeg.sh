@@ -65,6 +65,10 @@ common_configure() {
     --disable-indevs --disable-outdevs "$@"
 }
 
+# --disable-asm for Android: with the AAC decoder linked in, libavutil's AArch64 NEON
+# transform code (tx_float_neon.S) gets pulled into libremux_engine.so, and the linker
+# rejects its non-PIC relocations ("recompile with -fPIC"). Assembly only speeds up
+# decoding, which this app barely does (a few frames while probing), so drop it.
 build_android() {
   : "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME first}"
   HOST_TAG="linux-x86_64"
@@ -89,7 +93,7 @@ build_android() {
       --cxx="${TOOLCHAIN}/bin/${triple}${API_LEVEL}-clang++" \
       --strip="${TOOLCHAIN}/bin/llvm-strip" \
       --sysroot="${TOOLCHAIN}/sysroot" \
-      --enable-cross-compile --disable-x86asm
+      --enable-cross-compile --disable-asm
 
     make -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
     make install
