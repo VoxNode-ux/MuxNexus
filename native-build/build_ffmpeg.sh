@@ -38,6 +38,11 @@ clone_ffmpeg() {
 #   audio files: mp3, wav, aiff, flac, ac3, eac3, dts, dtshd, truehd, ape, wv,
 #                caf, aac (raw ADTS)
 #   raw video  : h264, hevc
+# Decoders are off, with ONE exception: AAC (plus its LATM wrapper). In MPEG-TS and
+# raw ADTS files the channel count and sample rate are not stored anywhere
+# readable; FFmpeg only learns them by decoding the first audio frame. Without
+# the decoder those files can't be written ("sample rate not set"). The decoder
+# is used only while probing; packets are still copied untouched.
 DEMUXERS=(mov matroska aac mpegts mpegps avi flv ogg asf mp3 wav aiff flac
           ac3 eac3 dts dtshd truehd ape wv caf h264 hevc)
 DEMUXER_FLAGS=()
@@ -52,6 +57,7 @@ common_configure() {
     --disable-encoders --disable-muxers \
     --enable-muxer=mp4 --enable-muxer=mov --enable-muxer=matroska \
     --disable-decoders --disable-bsfs \
+    --enable-decoder=aac --enable-decoder=aac_latm \
     --enable-bsf=aac_adtstoasc --enable-bsf=hevc_mp4toannexb \
     --enable-bsf=extract_extradata \
     --disable-demuxers \
