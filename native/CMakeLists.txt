@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(muxnexus_core STATIC
     core/remux_core.cpp
     core/remux_checks.cpp
+    core/merge_core.cpp
 )
 target_include_directories(muxnexus_core PUBLIC core)
 
