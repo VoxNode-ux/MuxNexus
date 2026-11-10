@@ -22,3 +22,12 @@ set_tests_properties(integration PROPERTIES
     ENVIRONMENT "MUXNEXUS_FIXTURES_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/generated"
     SKIP_RETURN_CODE 77
 )
+
+add_executable(test_merge test_merge.cpp)
+target_link_libraries(test_merge PRIVATE muxnexus_core doctest::doctest PkgConfig::FFMPEG)
+target_include_directories(test_merge PRIVATE ${CMAKE_SOURCE_DIR}/core)
+add_test(NAME merge COMMAND test_merge)
+set_tests_properties(merge PROPERTIES
+    ENVIRONMENT "MUXNEXUS_FIXTURES_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/generated"
+    SKIP_RETURN_CODE 77
+)
