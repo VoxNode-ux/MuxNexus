@@ -8,9 +8,8 @@ Re-wrap MP4, MOV and Matroska files in seconds — **no re-encoding, no quality
 loss, no internet.** An Android app and a small command-line tool, built on a
 network-stripped FFmpeg.
 
+[![build](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/build.yaml/badge.svg)](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/build.yaml)
 [![test-native](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/test-native.yaml/badge.svg)](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/test-native.yaml)
-[![test-android](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/test-android.yaml/badge.svg)](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/test-android.yaml)
-[![smoke-test](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/smoke-test.yaml/badge.svg)](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/smoke-test.yaml)
 [![CodeQL](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/codeql.yaml/badge.svg)](https://github.com/VoxNode-ux/MuxNexus/actions/workflows/codeql.yaml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -62,6 +61,9 @@ networking removed.
   forever, and 256 KB buffered I/O straight on file descriptors.
 - **Adaptive layouts** (phone, tablet and large-screen two-pane/expanded) and
   light/dark themes, in Jetpack Compose.
+- **Merge streams from several files** without re-encoding: swap the audio of
+  two videos, add a lossless soundtrack, or keep only the best of several audio
+  tracks (command line; see [Merging](#merging-swap-the-audio-keep-the-picture)).
 - **A desktop CLI** (Linux, macOS) sharing the exact same engine.
 
 ## Download
@@ -111,15 +113,15 @@ sha256sum -c app-universal-debug.apk.sha256        # Linux
 shasum -a 256 -c app-universal-debug.apk.sha256    # macOS
 ```
 
-Tagged releases are also **attested with GitHub build provenance** — a signed
+Releases are also **attested with GitHub build provenance** — a signed
 statement of which commit and workflow produced each file:
 
 ```bash
 gh attestation verify app-universal-debug.apk --repo VoxNode-ux/MuxNexus
 ```
 
-(Provenance requires the repository to be public when the tag is built. If a
-release has no attestation, treat it as unattested.)
+(Provenance is only created while the repository is public. If a release has no
+attestation, treat it as unattested.)
 
 ## Using it
 
@@ -165,6 +167,76 @@ Warnings and failures about specific streams are printed with a suggested fix:
 `Complete (not verified)` means it was written but the verification pass did not
 run (for example the output exceeded the 2 GiB verification limit), and
 `Complete (verification warnings)` means it ran and flagged something.
+
+## Merging: swap the audio, keep the picture
+
+Remuxing changes the box. **Merging** takes streams from *several* files and
+puts them in one new file, still without re-encoding: the picture of one video
+with the sound of another, a lossless soundtrack dropped onto a video that only
+had compressed audio, or one file with five audio tracks trimmed down to the
+best one. Every packet is copied byte for byte; only its timestamp is adjusted.
+
+> [!NOTE]
+> Merging is available in the **command-line tool** today. The Android app does
+> not expose it yet (see [Roadmap](#roadmap)).
+
+```bash
+# What's in a file, and which audio track is the best?
+muxnexus probe movie.mkv
+#   #0 video h264 1920x1080
+#   #1 audio ac3 6ch 48000Hz 448kbps lossy score=4486
+#   #2 audio flac 2ch 48000Hz 24bit lossless score=1001172
+#   Best audio: #2 (flac)
+
+# Picture from a.mp4, best audio track from b.mkv:
+muxnexus merge out.mkv matroska a.mp4:v b.mkv:best
+
+# Lossless audio file + a video, with the audio delayed by 120 ms:
+muxnexus merge out.mkv matroska clip.mp4:v soundtrack.flac:best,d120
+
+# One file, keep the video and only its best audio track:
+muxnexus merge out.mkv matroska multi.mkv:v,best
+```
+
+(The `probe` output above is illustrative; the numbers depend on your file.)
+
+**Selectors** go after the last `:` of an input, separated by commas. With no
+selector an input contributes all of its video and audio (and subtitles when the
+output is MKV).
+
+| Selector | Meaning |
+|----------|---------|
+| `v` / `a` / `s` | all video / audio / subtitle streams (cover art is skipped) |
+| `best` | only the highest-quality audio stream |
+| `i<N>` | exactly stream number N (see `probe`) |
+| `d<ms>` | delay this input by N milliseconds; negative values move it earlier |
+
+**What it does for you**
+
+- **Ranks audio by quality.** Lossless beats lossy; among lossless, higher
+  bit depth and sample rate win, then more channels; among lossy, higher bit rate
+  wins. DTS counts as lossless only when it is DTS-HD Master Audio.
+- **Ends with the video.** If the audio is longer than the video it is trimmed
+  to the video's length. If it is shorter by more than a second you get a
+  warning that the rest will be silent. (With a single input it behaves like a
+  plain remux and never trims.)
+- **Lines inputs up on a shared timeline.** Each input starts at zero, plus the
+  delay you give it. Packets from all inputs are written in time order.
+- **Keeps one default audio track**, whatever the sources said.
+- **Checks the result**: the output is re-opened and verified, same as a remux.
+
+**Honest limits**
+
+- "Best" is what the *file claims*. The engine can't listen: a lossless file
+  made by converting a lossy source still ranks as lossless, and muxing in a
+  better *container* can't improve a recording that was already low quality.
+  The gain is real only when the audio you add is genuinely better than the
+  audio the video had.
+- It does not detect or fix **sync** problems between two different recordings.
+  Use `d<ms>` if you know the offset.
+- Codec-in-container rules still apply: for example FLAC or TrueHD can't go into
+  MP4, so use MKV. Streams the output format can't hold are skipped with an
+  explanation.
 
 ## What can and can't be converted
 
@@ -272,7 +344,9 @@ is younger. Here is what you should know before relying on it:
 
 **Limits by design (for now)**
 
-- It remuxes only. No transcoding, trimming, merging or editing.
+- **The Android app can't merge yet and has no share target.** Both are planned;
+  merging works in the command-line tool today.
+- It remuxes and merges only. No transcoding, trimming or editing.
 - Only the input formats listed above are compiled into the Android build.
 - Chapters, attachments, data tracks and cover art are dropped.
 - **Resume is groundwork only.** The engine can compute a checkpoint when a job
@@ -363,9 +437,9 @@ set up to be checkable:
   comment. Dependabot keeps the pins current.
 - FFmpeg is built from a **pinned commit**, verified at build time. doctest is
   pinned to a commit as well.
-- Release files get **SHA-256 checksums** and, on tagged public releases,
+- Release files get **SHA-256 checksums** and, when the repository is public,
   **build provenance attestations**.
-- **CodeQL** scans on every push and pull request to `main` and weekly.
+- **CodeQL** (Java/Kotlin and C++) runs weekly and on demand.
 - Security-relevant Gradle build-tool libraries are held at patched versions.
 
 Not done yet: Gradle dependency hash verification (`verification-metadata.xml`)
@@ -379,14 +453,14 @@ app/                    Android app (Kotlin, Jetpack Compose)
   src/test/               Kotlin unit tests (Robolectric)
   src/androidTest/        Instrumented UI tests (not run in CI yet)
 native/
-  core/                   Remux engine, compatibility checks, fingerprinting
+  core/                   Remux and merge engines, compatibility checks, fingerprinting
   android/                JNI bridge
   desktop/                Command-line tool and its log sinks
   tests/                  C++ unit + integration tests, fixture generator
   fuzz/                   libFuzzer targets
 native-build/             Pinned, network-stripped FFmpeg build script
 scripts/smoke-test.sh     End-to-end CLI check
-.github/workflows/        CI, release, CodeQL, nightly
+.github/workflows/        Build, tests, smoke test, release, CodeQL, nightly
 ```
 
 ## Roadmap
@@ -395,11 +469,14 @@ In rough priority order. These are intentions, not promises:
 
 1. Open the Android output read/write so verification actually runs.
 2. A stable release keystore, so updates install over each other.
-3. Re-enable the instrumented UI tests in CI (emulator).
-4. Real resume support built on the existing checkpoint.
-5. Optional chapter and attachment preservation.
-6. Gradle dependency hash verification.
-7. Windows and Intel-Mac CLI builds.
+3. **Merge in the Android app** (pick a video and an audio source, choose the
+   best audio track), and a **share target** so files can be sent to MuxNexus
+   from other apps.
+4. Re-enable the instrumented UI tests in CI (emulator).
+5. Real resume support built on the existing checkpoint.
+6. Optional chapter and attachment preservation.
+7. Gradle dependency hash verification.
+8. Windows and Intel-Mac CLI builds.
 
 ## Contributing
 
