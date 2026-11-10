@@ -117,6 +117,7 @@ struct Input {
     bool have = false;              // `pkt` holds a packet waiting to be written
     int64_t t_us = 0;               // merged-timeline time of the pending packet
     int64_t last_t_us = INT64_MIN;  // merged-timeline time of the last written packet
+    int64_t last_end_us = INT64_MIN; // ... plus that packet's duration (0 if unknown)
     int64_t errors = 0;             // consecutive read errors
 
     Input() = default;
@@ -500,6 +501,8 @@ RemuxResult RunMerge(const std::vector<MergeInput>& inputs, int output_fd,
         const AVStream* is = in.fmt->streams[idx];
         const int oidx = in.map[idx];
         const AVStream* os = oc.fmt->streams[oidx];
+        const int64_t dur_us = p->duration > 0
+            ? av_rescale_q(p->duration, is->time_base, AVRational{1, 1000000}) : 0;
 
         const int64_t shift_tb = av_rescale_q(in.shift_us, AVRational{1, 1000000}, is->time_base);
         if (p->pts != AV_NOPTS_VALUE) p->pts += shift_tb;
@@ -522,6 +525,7 @@ RemuxResult RunMerge(const std::vector<MergeInput>& inputs, int output_fd,
         av_packet_unref(p);
         in.have = false;
         in.last_t_us = in.t_us;
+        in.last_end_us = in.t_us + dur_us;
     };
 
     if (cb) cb->on_progress(RemuxState::REMUXING, 0, "Merging");
@@ -548,7 +552,15 @@ RemuxResult RunMerge(const std::vector<MergeInput>& inputs, int output_fd,
         if (trim_donors) {
             bool video_done = true;
             for (auto& up : ins) if (up->supplies_video && up->have) video_done = false;
-            if (video_done) break;
+            if (video_done) {
+                // The video is over. Keep donor packets that start before the END
+                // of the last video frame (not before its start), drop the rest.
+                int64_t video_end = INT64_MIN;
+                for (auto& up : ins) {
+                    if (up->supplies_video) video_end = std::max(video_end, std::max(up->last_t_us, up->last_end_us));
+                }
+                if (video_end == INT64_MIN || next->t_us >= video_end) break;
+            }
         }
 
         const int64_t t = next->t_us;
@@ -572,7 +584,9 @@ RemuxResult RunMerge(const std::vector<MergeInput>& inputs, int output_fd,
     // 5. Tell the user what happened to audio that didn't line up with the video.
     if (trim_donors) {
         int64_t video_end = INT64_MIN;
-        for (auto& up : ins) if (up->supplies_video) video_end = std::max(video_end, up->last_t_us);
+        for (auto& up : ins) {
+            if (up->supplies_video) video_end = std::max(video_end, std::max(up->last_t_us, up->last_end_us));
+        }
         for (size_t i = 0; i < ins.size(); ++i) {
             const Input& in = *ins[i];
             if (in.supplies_video || in.mapped == 0) continue;
