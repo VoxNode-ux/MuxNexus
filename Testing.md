@@ -189,7 +189,7 @@ not enforced yet.
 | Workflow | Triggers | What it checks |
 |----------|----------|----------------|
 | `build.yaml` | every push to any branch (docs-only pushes skipped); manual; called by `release.yaml` | Android Lint, Kotlin unit tests, and all four APKs. With `build_cli` on, also the CLI binaries (Linux x86_64 and arm64, macOS arm64), each self-tested: MP4/MOV/MKV output, one input per extra format (TS, FLV, AVI, FLAC, WAV, Ogg, AC-3, MP3), and a merge |
-| `test-native.yaml` | push to `main` / pull requests touching `native/**` | C++ unit, merge and integration tests on Ubuntu, macOS and FreeBSD; fuzz build and short run |
+| `test-native.yaml` | push to `main` / pull requests touching `native/**`; manual | C++ unit, merge and integration tests on Ubuntu, macOS and FreeBSD; fuzz build and short run |
 | `test-android.yaml` | manual; weekly (Mon 05:00 UTC) | Kotlin unit tests; (instrumented tests disabled) |
 | `smoke-test.yaml` | manual | CLI smoke test on Ubuntu and macOS, with artifacts |
 | `codeql.yaml` | manual; weekly (Mon 06:00 UTC) | CodeQL static analysis (Java/Kotlin and C++) |
