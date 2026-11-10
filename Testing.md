@@ -7,15 +7,16 @@ what it covers, how to run it, whether CI runs it, and what it cannot tell you.
 
 | # | Layer | Where | Runs in CI? | Needs |
 |---|-------|-------|-------------|-------|
-| 1 | Smoke test (CLI end to end) | `scripts/smoke-test.sh` | Yes (`smoke-test.yaml`, Linux + macOS) | `ffmpeg` (with libx264, ideally libvorbis), `cmake`, `ninja`, `pkg-config`, FFmpeg dev libs, C++17 compiler |
+| 1 | Smoke test (CLI end to end) | `scripts/smoke-test.sh` | On demand (`smoke-test.yaml`, manual; Linux + macOS) | `ffmpeg` (with libx264, ideally libvorbis), `cmake`, `ninja`, `pkg-config`, FFmpeg dev libs, C++17 compiler |
 | 2 | C++ unit tests (24 cases) | `native/tests/test_checks.cpp` | Yes (`test-native.yaml`: Linux, macOS, FreeBSD) | FFmpeg dev libs, `cmake`, `ninja` |
 | 3 | C++ integration tests (6 cases) | `native/tests/test_integration.cpp` | Yes (same workflow) | Fixtures from `generate.sh` (needs the `ffmpeg` program) |
+| 3b | C++ merge tests (13 cases: 5 unit, 8 integration) | `native/tests/test_merge.cpp` | Yes (same workflow) | Same fixtures |
 | 4 | Fuzzing (2 libFuzzer targets) | `native/fuzz/` | Yes, on PRs and `main` (Linux, clang) | `clang`, FFmpeg dev libs |
-| 5 | Kotlin unit tests (25 cases) | `app/src/test/` | Yes (`test-android.yaml`, `release.yaml`) | JDK 21, Android SDK + NDK (Gradle drives it) |
+| 5 | Kotlin unit tests (25 cases) | `app/src/test/` | Yes (`build.yaml`, on every push; also `test-android.yaml`, manual + weekly) | JDK 21, Android SDK + NDK (Gradle drives it) |
 | 6 | Android instrumented tests (3 cases) | `app/src/androidTest/` | **No. The job is switched off (`if: false`).** | Emulator or device, plus a full FFmpeg build |
 
-Static analysis runs alongside these: Android Lint (in `release.yaml`) and
-CodeQL (`codeql.yaml`).
+Static analysis runs alongside these: Android Lint (in `build.yaml`) and
+CodeQL (`codeql.yaml`, weekly and on demand).
 
 ---
 
@@ -34,7 +35,10 @@ What it does:
 2. Generates a 1-second H.264 + AAC MP4 with `ffmpeg`.
 3. Remuxes it to Matroska, then back to MP4.
 4. Compares the codec lists of input and output. They must match.
-5. Tries Vorbis-in-Matroska to MP4. Depending on the FFmpeg version this is
+5. Merges the picture of that MP4 with a FLAC file (`merge ... in.mp4:v lossless.flac:best`)
+   and requires H.264 + FLAC and no AAC in the result. Also checks that
+   `probe` names the FLAC as the best audio.
+6. Tries Vorbis-in-Matroska to MP4. Depending on the FFmpeg version this is
    either rejected or allowed with a warning; **both outcomes pass** (see
    "FFmpeg version differences" below).
 
@@ -77,7 +81,10 @@ ctest --test-dir build --output-on-failure -R integration
 
 `generate.sh` writes into `native/tests/fixtures/generated/` (git-ignored):
 `aac.mp4` (H.264 + AAC), `aac.mkv`, `vorbis.mkv` (only if your `ffmpeg` has
-libvorbis), a 1 KiB `truncated.mp4`, and a zero-byte `empty.mp4`. Point the
+libvorbis), a 1 KiB `truncated.mp4`, a zero-byte `empty.mp4`, and the merge
+fixtures: `merge_video.mp4` (video only), `swap_b.mkv` (a second video with
+different audio), `lossless.flac` and `lossless_long.flac` (24-bit/48 kHz),
+and `multi_audio.mkv` (video + AAC, FLAC and AC-3 tracks). Point the
 tests somewhere else with `MUXNEXUS_FIXTURES_DIR`. If fixtures are missing the
 tests skip (exit code 77) rather than fail.
 
@@ -95,6 +102,33 @@ One detail worth knowing when you write new tests: output verification
 re-reads the output file through a duplicate of the output descriptor, so the
 output must be opened **read/write** (`O_RDWR`), not write-only. A write-only
 descriptor silently disables verification.
+
+### 3b. Merge tests
+
+`test_merge` covers the stream-merging engine (`native/core/merge_core.cpp`).
+Run with `ctest --test-dir build --output-on-failure -R merge`.
+
+- **Audio ranking** (no files needed): lossless beats any lossy bit rate, higher
+  bit-depth x sample-rate wins among lossless, higher bit rate wins among lossy,
+  ties go to the earlier stream, non-audio streams are ignored.
+- **Probe** lists a three-audio-track file and picks the FLAC track as best.
+- **Audio swap**: picture of one video + audio of another. The test hashes every
+  packet's payload and requires the output's video hash to equal video A's and
+  its audio hash to equal video B's. That is the "no re-encoding" claim, checked
+  bit for bit.
+- **Best of several tracks**: a file with AAC 64k, FLAC and AC-3 192k keeps only
+  the FLAC.
+- **Lossless file + video** into MKV, hash-checked.
+- **Trimming**: a 4-second audio file over a 2-second video gives a ~2-second
+  result, and the user is told it was trimmed.
+- **Delay**: `offset_us = 500000` moves the audio start to about 0.5 s.
+- **MP4 output** with AAC from a second file, verified.
+- **Bad requests** (no inputs, stream index out of range, asking for audio from
+  a file that has none) fail with an error instead of writing a broken file.
+
+Not covered: audio that is *shorter* than the video (the "rest will be silent"
+warning), merging three or more inputs, subtitle streams, and sync between
+unrelated recordings.
 
 ## 4. Fuzzing
 
@@ -154,13 +188,14 @@ not enforced yet.
 
 | Workflow | Triggers | What it checks |
 |----------|----------|----------------|
-| `test-native.yaml` | push/PR touching `native/**` | C++ unit + integration on Ubuntu, macOS and FreeBSD; fuzz build and short run |
-| `test-android.yaml` | push to `main`, PRs | Kotlin unit tests; (instrumented tests disabled) |
-| `smoke-test.yaml` | push to `main`, PRs, manual | CLI smoke test on Ubuntu and macOS, with artifacts |
-| `codeql.yaml` | push/PR to `main`, weekly (Mon 06:00 UTC) | CodeQL static analysis |
-| `release.yaml` | version tags, manual | Lint, unit tests, then builds the APKs and CLI binaries. Each CLI binary is self-tested: MP4/MOV/MKV output, then one input per extra format (TS, FLV, AVI, FLAC, WAV, Ogg, AC-3, MP3) |
+| `build.yaml` | every push to any branch (docs-only pushes skipped); manual; called by `release.yaml` | Android Lint, Kotlin unit tests, and all four APKs. With `build_cli` on, also the CLI binaries (Linux x86_64 and arm64, macOS arm64), each self-tested: MP4/MOV/MKV output, one input per extra format (TS, FLV, AVI, FLAC, WAV, Ogg, AC-3, MP3), and a merge |
+| `test-native.yaml` | push to `main` / pull requests touching `native/**` | C++ unit, merge and integration tests on Ubuntu, macOS and FreeBSD; fuzz build and short run |
+| `test-android.yaml` | manual; weekly (Mon 05:00 UTC) | Kotlin unit tests; (instrumented tests disabled) |
+| `smoke-test.yaml` | manual | CLI smoke test on Ubuntu and macOS, with artifacts |
+| `codeql.yaml` | manual; weekly (Mon 06:00 UTC) | CodeQL static analysis (Java/Kotlin and C++) |
+| `release.yaml` | manual (you enter the version) | Validates the version, runs `build.yaml` with the CLI builds on, attests the files (public repo only) and creates the GitHub Release |
 | `dependency-submission.yaml` | push to `main`, manual | Feeds the Gradle dependency graph to GitHub (Dependabot alerts) |
-| `nightly.yaml` | daily 04:00 UTC | Rebuilds the Android FFmpeg libraries |
+| `nightly.yaml` | daily 04:00 UTC, manual | Rebuilds the Android FFmpeg libraries |
 
 ## FFmpeg version differences
 
