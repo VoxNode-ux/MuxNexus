@@ -1,6 +1,7 @@
 name: test-native
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ['native/**', '.github/workflows/test-native.yaml']
@@ -48,7 +49,7 @@ jobs:
 
   fuzz:
     runs-on: ubuntu-24.04
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: |
@@ -62,4 +63,4 @@ jobs:
         run: cmake -S native -B build-fuzz -G Ninja -DMUXNEXUS_BUILD_FUZZ=ON
       - run: cmake --build build-fuzz
       - run: ./build-fuzz/fuzz/fuzz_fingerprint -max_total_time=30 -print_final_stats=1
-      - run: ./build-fuzz/fuzz/fuzz_demux -max_total_time=60 -print_final_stats=1 
+      - run: ./build-fuzz/fuzz/fuzz_demux -max_total_time=60 -print_final_stats=1
