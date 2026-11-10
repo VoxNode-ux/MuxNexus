@@ -109,7 +109,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: app/src/main/cpp/ffmpeg
-          key: ffmpeg-n6.1.6-abi3-v2
+          key: ffmpeg-n6.1.6-abi3-v3
 
       - name: Build FFmpeg
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
@@ -200,7 +200,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: build-desktop
-          key: ffmpeg-n6.1.6-desktop-${{ matrix.name }}-v2
+          key: ffmpeg-n6.1.6-desktop-${{ matrix.name }}-v3
 
       - name: Build static FFmpeg (pinned commit, network and protocols stripped)
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
@@ -263,11 +263,19 @@ jobs:
           gen "${A[@]}" -c:a libvorbis in.ogg
           gen "${A[@]}" -c:a ac3 in.ac3
           gen "${A[@]}" -c:a libmp3lame in.mp3
+          gen "${A[@]}" -c:a aac -f adts in.aac
+          gen "${A[@]}" -c:a flac audio-lossless.flac
           failed=0
           for f in in.*; do
             "$GITHUB_WORKSPACE/build-cli/muxnexus" "$f" "out-$f.mkv" matroska > log.txt 2>&1 || true
             if grep -aq '^Result: Complete$' log.txt; then echo "ok:   $f"; else echo "FAIL: $f"; cat log.txt; failed=1; fi
           done
+          # Merge: picture of the MP4 + best audio of a lossless file.
+          probe_out=$("$GITHUB_WORKSPACE/build-cli/muxnexus" probe audio-lossless.flac)
+          echo "$probe_out" | grep -q 'Best audio' || { echo "FAIL: probe"; echo "$probe_out"; failed=1; }
+          "$GITHUB_WORKSPACE/build-cli/muxnexus" merge merged.mkv matroska \
+            "$RUNNER_TEMP/in.mp4:v" audio-lossless.flac:best > log.txt 2>&1 || true
+          if grep -aq '^Result: Complete$' log.txt; then echo "ok:   merge"; else echo "FAIL: merge"; cat log.txt; failed=1; fi
           exit $failed
 
       - name: Package
